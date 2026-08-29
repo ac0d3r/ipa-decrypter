@@ -1,0 +1,17 @@
+services:
+  ipa-decrypter:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: ipa-decrypter:latest
+    ports:
+      - "${HOST_PORT:-8080}:8080"
+    volumes:
+      - ${DATA_DIR:-./data}:/data
+    environment:
+      LISTEN_ADDR: ":8080"
+      DATA_DIR: /data
+      WEB_DIR: /app/web/dist
+      IPATOOL_BIN: /usr/local/bin/ipatool
+      KEYCHAIN_PASSPHRASE: ${KEYCHAIN_PASSPHRASE:-ipatool-ipa-decrypter}
+    restart: unless-stopped

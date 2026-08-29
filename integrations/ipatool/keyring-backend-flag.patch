@@ -1,0 +1,98 @@
+# Add --keyring-backend flag to avoid macOS Keychain
+#
+# Changes:
+#   - cmd/keyring_backend.go  (new)  backend selection: auto / file / keychain
+#   - cmd/common.go                  wire keyringBackends() into keychain init
+#   - cmd/root.go                    add --keyring-backend persistent flag
+#
+# Apply:
+#   git apply --check patches/keyring-backend-flag.patch
+#   git apply patches/keyring-backend-flag.patch
+#
+# Usage:
+#   ipatool auth login --keyring-backend file --keychain-passphrase "your-passphrase"
+
+diff --git a/cmd/common.go b/cmd/common.go
+--- a/cmd/common.go
++++ b/cmd/common.go
+@@ -24,6 +24,7 @@ import (
+ 
+ var dependencies = Dependencies{}
+ var keychainPassphrase string
++var keyringBackend KeyringBackend
+ 
+ type Dependencies struct {
+ 	Logger    log.Logger
+@@ -62,13 +63,9 @@ func newCookieJar(machine machine.Machine) http.CookieJar {
+ // newKeychain returns a new keychain instance.
+ func newKeychain(machine machine.Machine, logger log.Logger, interactive bool) keychain.Keychain {
+ 	ring := util.Must(keyring.Open(keyring.Config{
+-		AllowedBackends: []keyring.BackendType{
+-			keyring.KeychainBackend,
+-			keyring.SecretServiceBackend,
+-			keyring.FileBackend,
+-		},
+-		ServiceName: KeychainServiceName,
+-		FileDir:     filepath.Join(machine.HomeDirectory(), ConfigDirectoryName),
++		AllowedBackends: keyringBackends(keyringBackend),
++		ServiceName:     KeychainServiceName,
++		FileDir:         filepath.Join(machine.HomeDirectory(), ConfigDirectoryName),
+ 		FilePasswordFunc: func(s string) (string, error) {
+ 			if keychainPassphrase == "" && !interactive {
+ 				return "", errors.New("keychain passphrase is required when not running in interactive mode; use the \"--keychain-passphrase\" flag")
+diff --git a/cmd/keyring_backend.go b/cmd/keyring_backend.go
+new file mode 100644
+index 0000000..4127fb7
+--- /dev/null
++++ b/cmd/keyring_backend.go
+@@ -0,0 +1,29 @@
++package cmd
++
++import (
++	"github.com/byteness/keyring"
++	"github.com/thediveo/enumflag/v2"
++)
++
++type KeyringBackend enumflag.Flag
++
++const (
++	KeyringBackendAuto KeyringBackend = iota
++	KeyringBackendFile
++	KeyringBackendKeychain
++)
++
++func keyringBackends(backend KeyringBackend) []keyring.BackendType {
++	switch backend {
++	case KeyringBackendFile:
++		return []keyring.BackendType{keyring.FileBackend}
++	case KeyringBackendKeychain:
++		return []keyring.BackendType{keyring.KeychainBackend}
++	default:
++		return []keyring.BackendType{
++			keyring.KeychainBackend,
++			keyring.SecretServiceBackend,
++			keyring.FileBackend,
++		}
++	}
++}
+diff --git a/cmd/root.go b/cmd/root.go
+--- a/cmd/root.go
++++ b/cmd/root.go
+@@ -43,7 +43,16 @@ func rootCmd() *cobra.Command {
+ 		}, enumflag.EnumCaseSensitive), "format", "", "sets output format for command; can be 'text', 'json'")
+ 	cmd.PersistentFlags().BoolVar(&verbose, "verbose", false, "enables verbose logs")
+ 	cmd.PersistentFlags().BoolVarP(&nonInteractive, "non-interactive", "", false, "run in non-interactive session")
+-	cmd.PersistentFlags().StringVar(&keychainPassphrase, "keychain-passphrase", "", "passphrase for unlocking keychain")
++	cmd.PersistentFlags().StringVar(&keychainPassphrase, "keychain-passphrase", "", "passphrase for unlocking encrypted credential storage")
++	cmd.PersistentFlags().Var(
++		enumflag.New(&keyringBackend, "keyring-backend", map[KeyringBackend][]string{
++			KeyringBackendAuto:     {"auto"},
++			KeyringBackendFile:     {"file"},
++			KeyringBackendKeychain: {"keychain"},
++		}, enumflag.EnumCaseSensitive),
++		"keyring-backend",
++		"credential storage backend; use 'file' to avoid macOS Keychain",
++	)
+ 
+ 	cmd.AddCommand(authCmd())
+ 	cmd.AddCommand(downloadCmd())

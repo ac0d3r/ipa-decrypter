@@ -1,0 +1,15 @@
+.git
+.gitignore
+.DS_Store
+.env
+.env.*
+
+bin/
+data/
+debs/
+
+web/node_modules/
+web/dist/
+
+*.md
+LICENSE
