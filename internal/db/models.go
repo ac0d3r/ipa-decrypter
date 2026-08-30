@@ -41,33 +41,24 @@ func (d Device) BaseURL() string {
 }
 
 type Task struct {
-	ID                 string    `gorm:"primaryKey" json:"id"`
-	BundleID           string    `json:"bundle_id"`
-	AppName            string    `json:"app_name"`
-	Region             string    `json:"region"`
-	ExternalVersionID  string    `json:"external_version_id,omitempty"`
-	DisplayVersion     string    `json:"display_version,omitempty"`
-	IconURL            string    `json:"icon_url,omitempty"`
-	SizeBytes          int64     `json:"size_bytes,omitempty"`
-	AppID              int64     `json:"app_id,omitempty"`
-	Status             string    `json:"status"` // queued|downloading|decrypting|completed|failed
-	Detail             string    `json:"detail,omitempty"`
-	Error              string    `json:"error,omitempty"`
-	AccountID          string    `json:"account_id,omitempty"`
-	DeviceID           string    `json:"device_id,omitempty"`
-	OutputPath         string    `json:"output_path,omitempty"`    // decrypted IPA
-	EncryptedPath      string    `json:"encrypted_path,omitempty"` // downloaded encrypted IPA
-	DownloadStdout     string    `json:"download_stdout,omitempty"`
-	DownloadStderr     string    `json:"download_stderr,omitempty"`
-	UnfairdJobID       string    `json:"unfaird_job_id,omitempty"`
-	UnfairdDownloadURL string    `json:"unfaird_download_url,omitempty"`
-	ValidateUntil      int64     `json:"validate_until,omitempty"`
-	DecryptExitCode    *int32    `json:"decrypt_exit_code,omitempty"`
-	DecryptStdout      string    `json:"decrypt_stdout,omitempty"`
-	DecryptStderr      string    `json:"decrypt_stderr,omitempty"`
-	Logs               []string  `gorm:"serializer:json" json:"logs"`
-	CreatedAt          time.Time `json:"created_at"`
-	UpdatedAt          time.Time `json:"updated_at"`
+	ID                string    `gorm:"primaryKey" json:"id"`
+	BundleID          string    `json:"bundle_id"`
+	AppName           string    `json:"app_name"`
+	Region            string    `json:"region"`
+	ExternalVersionID string    `json:"external_version_id,omitempty"`
+	DisplayVersion    string    `json:"display_version,omitempty"`
+	IconURL           string    `json:"icon_url,omitempty"`
+	SizeBytes         int64     `json:"size_bytes,omitempty"`
+	AppID             int64     `json:"app_id,omitempty"`
+	Status            string    `json:"status"` // queued|downloading|decrypting|completed|failed
+	Error             string    `json:"error,omitempty"`
+	AccountID         string    `json:"account_id,omitempty"`
+	DeviceID          string    `json:"device_id,omitempty"`
+	OutputPath        string    `json:"output_path,omitempty"`    // decrypted IPA
+	EncryptedPath     string    `json:"encrypted_path,omitempty"` // downloaded encrypted IPA
+	Logs              []string  `gorm:"serializer:json" json:"logs"`
+	CreatedAt         time.Time `json:"created_at"`
+	UpdatedAt         time.Time `json:"updated_at"`
 }
 
 type Secret struct {
@@ -79,13 +70,13 @@ func (Secret) TableName() string { return "secrets" }
 
 // AdminUser is the web admin panel operator (not an Apple ID).
 type AdminUser struct {
-	ID                string     `gorm:"primaryKey" json:"id"`
-	Username          string     `gorm:"uniqueIndex;size:64" json:"username"`
-	PasswordHash      string     `json:"-"`
-	SessionToken      string     `gorm:"index;size:64" json:"-"`
-	SessionExpiresAt  *time.Time `json:"expires_at,omitempty"`
-	CreatedAt         time.Time  `json:"created_at"`
-	UpdatedAt         time.Time  `json:"updated_at"`
+	ID               string     `gorm:"primaryKey" json:"id"`
+	Username         string     `gorm:"uniqueIndex;size:64" json:"username"`
+	PasswordHash     string     `json:"-"`
+	SessionToken     string     `gorm:"index;size:64" json:"-"`
+	SessionExpiresAt *time.Time `json:"expires_at,omitempty"`
+	CreatedAt        time.Time  `json:"created_at"`
+	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
 func (AdminUser) TableName() string { return "admin_users" }

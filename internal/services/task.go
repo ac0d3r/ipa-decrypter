@@ -46,7 +46,6 @@ type TaskRequestInput struct {
 	ExternalVersionID string `json:"external_version_id"`
 	DisplayVersion    string `json:"display_version"`
 	IconURL           string `json:"icon_url"`
-	SizeBytes         int64  `json:"size_bytes"`
 	AppID             int64  `json:"app_id"`
 }
 
@@ -174,10 +173,8 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 		ExternalVersionID: extVer,
 		DisplayVersion:    strings.TrimSpace(in.DisplayVersion),
 		IconURL:           strings.TrimSpace(in.IconURL),
-		SizeBytes:         in.SizeBytes,
 		AppID:             in.AppID,
 		Status:            "queued",
-		Detail:            "Queued",
 		AccountID:         acc.ID,
 		DeviceID:          dev.ID,
 		Logs:              []string{"Task queued"},
@@ -262,7 +259,6 @@ func (s *TaskService) run(id string) {
 	} else {
 		s.log(&task, "Starting download")
 		task.Status = "downloading"
-		task.Detail = "Downloading from App Store"
 		task.UpdatedAt = time.Now().UTC()
 		_ = s.db.UpdateTask(task)
 
@@ -274,7 +270,6 @@ func (s *TaskService) run(id string) {
 
 	s.log(&task, "Sending to unfaird")
 	task.Status = "decrypting"
-	task.Detail = "Decrypting on device"
 	task.UpdatedAt = time.Now().UTC()
 	_ = s.db.UpdateTask(task)
 
@@ -284,7 +279,6 @@ func (s *TaskService) run(id string) {
 	}
 
 	task.Status = "completed"
-	task.Detail = "Ready"
 	task.Error = ""
 	task.UpdatedAt = time.Now().UTC()
 	s.log(&task, "Decrypt complete")
@@ -307,8 +301,6 @@ func (s *TaskService) download(task *db.Task) error {
 	defer cancel()
 
 	res, runErr := s.accounts.Runner().Download(ctx, home, task.BundleID, task.AppID, out, task.ExternalVersionID, true)
-	task.DownloadStdout = res.Stdout
-	task.DownloadStderr = res.Stderr
 	task.UpdatedAt = time.Now().UTC()
 
 	if runErr != nil || res.ExitCode != 0 {
@@ -364,13 +356,6 @@ func (s *TaskService) decrypt(task *db.Task) error {
 	}
 
 	code := resp.Exit.Code
-	task.DecryptExitCode = &code
-	task.DecryptStdout = resp.Exit.Stdout
-	task.DecryptStderr = resp.Exit.Stderr
-	task.UnfairdDownloadURL = resp.Exit.DownloadURL
-	task.ValidateUntil = resp.Exit.ValidateUntil
-	task.UnfairdJobID = unfaird.JobIDFromDownloadURL(resp.Exit.DownloadURL)
-
 	if code != 0 {
 		taskLog.WithFields(map[string]any{"task_id": task.ID, "exit_code": code}).Error("unfaird decrypt failed")
 		_ = s.db.UpdateTask(*task)
@@ -427,22 +412,12 @@ func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput) (db.Task
 	now := time.Now().UTC()
 	failed.Status = "queued"
 	failed.Error = ""
-	failed.Detail = "Queued"
 	failed.AppName = in.AppName
 	failed.DisplayVersion = strings.TrimSpace(in.DisplayVersion)
 	failed.IconURL = strings.TrimSpace(in.IconURL)
-	if in.SizeBytes > 0 {
-		failed.SizeBytes = in.SizeBytes
-	}
 	failed.AppID = in.AppID
 	failed.AccountID = acc.ID
 	failed.DeviceID = dev.ID
-	failed.DecryptExitCode = nil
-	failed.DecryptStdout = ""
-	failed.DecryptStderr = ""
-	failed.UnfairdJobID = ""
-	failed.UnfairdDownloadURL = ""
-	failed.ValidateUntil = 0
 	failed.OutputPath = ""
 	failed.UpdatedAt = now
 	s.log(&failed, "Retry queued (encrypted IPA on disk)")
@@ -493,7 +468,6 @@ func (s *TaskService) log(task *db.Task, line string) {
 func (s *TaskService) fail(task *db.Task, msg string) {
 	task.Status = "failed"
 	task.Error = msg
-	task.Detail = "Failed"
 	task.UpdatedAt = time.Now().UTC()
 	s.log(task, msg)
 	taskLog.WithFields(map[string]any{

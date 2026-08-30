@@ -45,8 +45,13 @@ async function request(path, options = {}) {
 // --- Public (前台) ---
 export const publicApi = {
   regions: () => request('/api/v1/regions'),
-  lookup: (id, region) => request(`/api/v1/lookup?id=${encodeURIComponent(id)}&region=${encodeURIComponent(region)}`),
-  search: (q, region) => request(`/api/v1/search?q=${encodeURIComponent(q)}&region=${encodeURIComponent(region)}`),
+  search: ({ q, bundle_id, region, limit } = {}) => {
+    const params = new URLSearchParams({ region: region || '' })
+    if (bundle_id) params.set('bundle_id', bundle_id)
+    else if (q) params.set('q', q)
+    if (limit) params.set('limit', String(limit))
+    return request(`/api/v1/search?${params}`)
+  },
   versions: (bundle_id, region, app_id = 0, offset = 0, limit = 5) => {
     const q = new URLSearchParams({ bundle_id, region })
     if (app_id) q.set('app_id', String(app_id))
@@ -55,7 +60,7 @@ export const publicApi = {
     return request(`/api/v1/versions?${q}`)
   },
   request: (body) => request('/api/v1/request', { method: 'POST', body: JSON.stringify(body) }),
-  job: (id) => request(`/api/v1/jobs/${id}`),
+  task: (id) => request(`/api/v1/tasks/${id}`),
   queue: () => request('/api/v1/queue'),
   cache: () => request('/api/v1/cache'),
   cachedByBundles: (region, bundleIds) => {
@@ -66,7 +71,6 @@ export const publicApi = {
     })
     return request(`/api/v1/cache?${q}`)
   },
-  downloadURL: (bundleId, region) => `/api/v1/download/${encodeURIComponent(bundleId)}?region=${encodeURIComponent(region)}`,
   taskFileURL: (id) => `/api/v1/tasks/${id}/file`,
 }
 

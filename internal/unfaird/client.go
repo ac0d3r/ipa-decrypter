@@ -133,14 +133,3 @@ func (c *UnfairdClient) DownloadOutput(ctx context.Context, downloadURL, destPat
 	_, err = io.Copy(f, resp.Body)
 	return err
 }
-
-func JobIDFromDownloadURL(url string) string {
-	// /api/v1/decrypt/<uuid>/output
-	parts := strings.Split(strings.Trim(url, "/"), "/")
-	for i := 0; i+1 < len(parts); i++ {
-		if parts[i] == "decrypt" {
-			return parts[i+1]
-		}
-	}
-	return ""
-}

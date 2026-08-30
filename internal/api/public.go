@@ -12,42 +12,39 @@ import (
 )
 
 func (s *Server) registerPublicRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("GET /api/v1/lookup", s.handleLookup)
 	mux.HandleFunc("GET /api/v1/search", s.handleSearch)
 	mux.HandleFunc("GET /api/v1/regions", s.handleRegions)
 	mux.HandleFunc("GET /api/v1/versions", s.handleVersions)
+	mux.HandleFunc("GET /api/v1/cache", s.handleCache)
 	mux.HandleFunc("POST /api/v1/request", s.handleRequest)
 	mux.HandleFunc("GET /api/v1/queue", s.handleQueue)
-	mux.HandleFunc("GET /api/v1/cache", s.handleCache)
-	mux.HandleFunc("GET /api/v1/jobs/{id}", s.handleJob)
-	mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleJob)
+	mux.HandleFunc("GET /api/v1/tasks/{id}", s.handleTask)
 	mux.HandleFunc("GET /api/v1/tasks/{id}/file", s.handleTaskFile)
-	mux.HandleFunc("GET /api/v1/download/{bundle_id}", s.handleDownloadByBundle)
-}
-
-func (s *Server) handleLookup(w http.ResponseWriter, r *http.Request) {
-	id := r.URL.Query().Get("id")
-	if id == "" {
-		id = r.URL.Query().Get("bundle_id")
-	}
-	region := r.URL.Query().Get("region")
-	results, err := itunes.Lookup(id, region)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
 func (s *Server) handleSearch(w http.ResponseWriter, r *http.Request) {
-	q := r.URL.Query().Get("q")
 	region := r.URL.Query().Get("region")
-	limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
-	results, err := itunes.Search(q, region, limit)
+	bundleID := strings.TrimSpace(r.URL.Query().Get("bundle_id"))
+	q := strings.TrimSpace(r.URL.Query().Get("q"))
+
+	var (
+		results []itunes.AppResult
+		err     error
+	)
+	if bundleID != "" {
+		results, err = itunes.Lookup(bundleID, region)
+	} else if q != "" {
+		limit, _ := strconv.Atoi(r.URL.Query().Get("limit"))
+		results, err = itunes.Search(q, region, limit)
+	} else {
+		writeErr(w, errStatus(http.StatusBadRequest, "bundle_id or q required"))
+		return
+	}
 	if err != nil {
 		writeErr(w, err)
 		return
 	}
+
 	writeJSON(w, http.StatusOK, map[string]any{"results": results})
 }
 
@@ -65,9 +62,6 @@ func (s *Server) handleRegions(w http.ResponseWriter, r *http.Request) {
 
 func (s *Server) handleVersions(w http.ResponseWriter, r *http.Request) {
 	bundleID := r.URL.Query().Get("bundle_id")
-	if bundleID == "" {
-		bundleID = r.URL.Query().Get("id")
-	}
 	region := r.URL.Query().Get("region")
 	appID, _ := strconv.ParseInt(r.URL.Query().Get("app_id"), 10, 64)
 	offset, _ := strconv.Atoi(r.URL.Query().Get("offset"))
@@ -92,9 +86,9 @@ func (s *Server) handleRequest(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	writeJSON(w, http.StatusOK, map[string]any{
-		"job_id": t.ID,
-		"status": t.Status,
-		"task":   t,
+		"task_id": t.ID,
+		"status":  t.Status,
+		"task":    t,
 	})
 }
 
@@ -138,7 +132,7 @@ func (s *Server) handleCache(w http.ResponseWriter, r *http.Request) {
 	writeJSON(w, http.StatusOK, map[string]any{"cache": items})
 }
 
-func (s *Server) handleJob(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleTask(w http.ResponseWriter, r *http.Request) {
 	id := r.PathValue("id")
 	t, err := s.Tasks.Get(id)
 	if err != nil {
@@ -160,23 +154,4 @@ func (s *Server) handleTaskFile(w http.ResponseWriter, r *http.Request) {
 	}
 	name := t.BundleID + ".ipa"
 	serveFile(w, r, t.OutputPath, name)
-}
-
-func (s *Server) handleDownloadByBundle(w http.ResponseWriter, r *http.Request) {
-	bundleID := r.PathValue("bundle_id")
-	region := r.URL.Query().Get("region")
-	tasks, err := s.Tasks.Cache(50)
-	if err != nil {
-		writeErr(w, err)
-		return
-	}
-	for _, t := range tasks {
-		if t.BundleID == bundleID && t.Status == "completed" && t.OutputPath != "" {
-			if region == "" || t.Region == region {
-				serveFile(w, r, t.OutputPath, bundleID+".ipa")
-				return
-			}
-		}
-	}
-	writeErr(w, errStatus(http.StatusNotFound, "cached ipa not found"))
 }

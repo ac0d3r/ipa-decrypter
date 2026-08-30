@@ -14,7 +14,6 @@ export const messages = {
     },
     auth: {
       title: '管理员登录',
-      hint: '访问后台需要管理员账号',
       username: '用户名',
       password: '密码',
       logout: '退出登录',
@@ -141,7 +140,6 @@ export const messages = {
     },
     auth: {
       title: 'Admin login',
-      hint: 'Admin credentials required',
       username: 'Username',
       password: 'Password',
       logout: 'Log out',

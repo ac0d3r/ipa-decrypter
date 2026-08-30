@@ -169,7 +169,7 @@
           <div class="job-status-row">
             <span v-if="!isDone(activeJobs[app.bundle_id])" class="spinner"></span>
             <span class="status-text" :class="statusClass(activeJobs[app.bundle_id].status)">
-              {{ activeJobs[app.bundle_id].detail || taskStatus(activeJobs[app.bundle_id].status) }}
+              {{ taskStatus(activeJobs[app.bundle_id].status) }}
             </span>
           </div>
           <div v-if="activeJobs[app.bundle_id].error" class="err">{{ activeJobs[app.bundle_id].error }}</div>
@@ -447,10 +447,10 @@ async function runSearch() {
   busy.value = true
   try {
     if (mode.value === 'bundle' || q.includes('.')) {
-      const d = await publicApi.lookup(q, region.value)
+      const d = await publicApi.search({ bundle_id: q, region: region.value })
       results.value = d.results?.length ? d.results : [{ bundle_id: q, name: q, version: '?', size_bytes: 0, seller: '' }]
     } else {
-      const d = await publicApi.search(q, region.value)
+      const d = await publicApi.search({ q, region: region.value })
       results.value = d.results || []
     }
     await loadCachedForResults(results.value)
@@ -472,7 +472,6 @@ async function startDecrypt(app, ver) {
       region: region.value,
       app_id: app.app_id || 0,
       icon_url: app.icon_url || '',
-      size_bytes: app.size_bytes || 0,
     }
     if (ver && !ver.latest && ver.external_version_id) {
       body.external_version_id = ver.external_version_id
@@ -481,7 +480,7 @@ async function startDecrypt(app, ver) {
       body.display_version = app.version
     }
     const d = await publicApi.request(body)
-    const job = d.task || { id: d.job_id, status: d.status, bundle_id: app.bundle_id, logs: [] }
+    const job = d.task || { id: d.task_id, status: d.status, bundle_id: app.bundle_id, logs: [] }
     activeJobs[app.bundle_id] = job
     startPolling()
     await pollJob(job.id, app.bundle_id)
@@ -495,7 +494,7 @@ async function startDecrypt(app, ver) {
 
 async function pollJob(id, bundleId) {
   try {
-    const j = await publicApi.job(id)
+    const j = await publicApi.task(id)
     activeJobs[bundleId] = j
     if (!isDone(j)) return
     await loadCache()
