@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"math/rand/v2"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -201,12 +202,16 @@ func (s *TaskService) pickAccount(region string) (db.Account, error) {
 	if err != nil {
 		return db.Account{}, err
 	}
+	var candidates []db.Account
 	for _, a := range accounts {
 		if a.Status == "logged_in" && strings.EqualFold(a.Region, region) {
-			return a, nil
+			candidates = append(candidates, a)
 		}
 	}
-	return db.Account{}, fmt.Errorf("no logged-in account for region %s", region)
+	if len(candidates) == 0 {
+		return db.Account{}, fmt.Errorf("no logged-in account for region %s", region)
+	}
+	return candidates[rand.IntN(len(candidates))], nil
 }
 
 func (s *TaskService) pickDevice() (db.Device, error) {
@@ -214,20 +219,17 @@ func (s *TaskService) pickDevice() (db.Device, error) {
 	if err != nil {
 		return db.Device{}, err
 	}
+	var candidates []db.Device
 	for _, d := range devices {
 		if d.Status == "online" {
-			return d, nil
+			candidates = append(candidates, d)
 		}
 	}
-	if len(devices) == 0 {
-		return db.Device{}, fmt.Errorf("no decrypt device configured (add one in admin)")
+	if len(candidates) == 0 {
+		return db.Device{}, fmt.Errorf("no online decrypt device available")
 	}
-	d := devices[0]
-	updated, err := s.devices.Health(d.ID)
-	if err == nil && updated.Status == "online" {
-		return updated, nil
-	}
-	return db.Device{}, fmt.Errorf("no online decrypt device available")
+
+	return candidates[rand.IntN(len(candidates))], nil
 }
 
 func (s *TaskService) run(id string) {
