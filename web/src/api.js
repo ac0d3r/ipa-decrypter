@@ -74,16 +74,19 @@ export const publicApi = {
   taskFileURL: (id) => `/api/v1/tasks/${id}/file`,
 }
 
-// --- Admin (后台) ---
-export const adminApi = {
-  login: (username, password) => request('/api/v1/admin/login', {
+// --- Auth ---
+export const authApi = {
+  login: (username, password) => request('/api/v1/auth/login', {
     method: 'POST',
     body: JSON.stringify({ username, password }),
     skipAuthRedirect: true,
   }),
-  logout: () => request('/api/v1/admin/logout', { method: 'POST', skipAuthRedirect: true }),
-  me: () => request('/api/v1/admin/me', { skipAuthRedirect: true }),
+  logout: () => request('/api/v1/auth/logout', { method: 'POST', skipAuthRedirect: true }),
+  me: () => request('/api/v1/auth/me', { skipAuthRedirect: true }),
+}
 
+// --- Admin (后台) ---
+export const adminApi = {
   listAccounts: () => request('/api/v1/admin/accounts'),
   createAccount: (body) => request('/api/v1/admin/accounts', { method: 'POST', body: JSON.stringify(body) }),
   loginAccount: (id, auth_code = '') => request(`/api/v1/admin/accounts/${id}/login`, { method: 'POST', body: JSON.stringify({ auth_code }) }),
@@ -97,6 +100,11 @@ export const adminApi = {
   deleteDevice: (id) => request(`/api/v1/admin/devices/${id}`, { method: 'DELETE' }),
 
   listTasks: () => request('/api/v1/admin/tasks'),
+
+  listUsers: () => request('/api/v1/admin/users'),
+  createUser: (body) => request('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(body) }),
+  updateUser: (id, body) => request(`/api/v1/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
+  deleteUser: (id) => request(`/api/v1/admin/users/${id}`, { method: 'DELETE' }),
 }
 
 export function statusClass(status) {

@@ -13,6 +13,7 @@
         <RouterLink to="/admin/accounts">{{ t('nav.accounts') }}</RouterLink>
         <RouterLink to="/admin/devices">{{ t('nav.devices') }}</RouterLink>
         <RouterLink to="/admin/tasks">{{ t('nav.tasks') }}</RouterLink>
+        <RouterLink to="/admin/users">{{ t('nav.users') }}</RouterLink>
       </nav>
       <button type="button" class="logout" :disabled="busy" @click="logout">
         {{ t('auth.logout') }}
@@ -29,17 +30,17 @@ import { onMounted, ref } from 'vue'
 import { useRouter } from 'vue-router'
 import LangSwitch from '../../components/LangSwitch.vue'
 import { useI18n } from '../../i18n'
-import { adminApi } from '../../api'
-import { clearAuthState } from '../../auth'
+import { authApi } from '../../api'
+import { clearAuthState, currentUsername } from '../../auth'
 
 const { t } = useI18n()
 const router = useRouter()
-const username = ref('')
+const username = ref(currentUsername())
 const busy = ref(false)
 
 onMounted(async () => {
   try {
-    const me = await adminApi.me()
+    const me = await authApi.me()
     username.value = me?.username || ''
   } catch {
     username.value = ''
@@ -49,13 +50,13 @@ onMounted(async () => {
 async function logout() {
   busy.value = true
   try {
-    await adminApi.logout()
+    await authApi.logout()
   } catch {
     /* ignore */
   } finally {
     clearAuthState()
     busy.value = false
-    await router.replace('/admin/login')
+    await router.replace('/login')
   }
 }
 </script>

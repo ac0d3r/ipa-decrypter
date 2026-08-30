@@ -3,12 +3,13 @@ import { createRouter, createWebHistory } from 'vue-router'
 import App from './App.vue'
 import Home from './views/Home.vue'
 import AdminLayout from './views/admin/AdminLayout.vue'
-import Login from './views/admin/Login.vue'
+import Login from './views/Login.vue'
 import Accounts from './views/Accounts.vue'
 import Devices from './views/Devices.vue'
 import Tasks from './views/admin/Tasks.vue'
-import { adminApi, setUnauthorizedHandler } from './api'
-import { clearAuthState, isAuthChecked, isAuthed, markAuthed } from './auth'
+import Users from './views/admin/Users.vue'
+import { authApi, setUnauthorizedHandler } from './api'
+import { clearAuthState, isAuthChecked, isAuthed, isAdminUser, markAuthed } from './auth'
 import { initI18n } from './i18n'
 import './style.css'
 
@@ -18,16 +19,18 @@ const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Home },
-    { path: '/admin/login', component: Login, meta: { guest: true } },
+    { path: '/login', component: Login, meta: { guest: true } },
+    { path: '/admin/login', redirect: '/login' },
     {
       path: '/admin',
       component: AdminLayout,
-      meta: { requiresAuth: true },
+      meta: { requiresAdmin: true },
       children: [
         { path: '', redirect: '/admin/accounts' },
         { path: 'accounts', component: Accounts },
         { path: 'devices', component: Devices },
         { path: 'tasks', component: Tasks },
+        { path: 'users', component: Users },
       ],
     },
   ],
@@ -36,29 +39,35 @@ const router = createRouter({
 async function ensureAuth() {
   if (isAuthChecked()) return isAuthed()
   try {
-    await adminApi.me()
-    markAuthed(true)
+    const me = await authApi.me()
+    markAuthed({ admin: !!me?.is_admin, name: me?.username || '' })
   } catch {
-    markAuthed(false)
+    clearAuthState()
   }
   return isAuthed()
 }
 
 setUnauthorizedHandler(() => {
   clearAuthState()
-  if (router.currentRoute.value.path !== '/admin/login') {
-    router.replace({ path: '/admin/login', query: { redirect: router.currentRoute.value.fullPath } })
+  const path = router.currentRoute.value.path
+  if (path.startsWith('/admin')) {
+    router.replace({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
   }
 })
 
 router.beforeEach(async (to) => {
   if (to.meta.guest) {
-    if (await ensureAuth()) return '/admin'
+    if (await ensureAuth()) {
+      return isAdminUser() ? '/admin' : '/'
+    }
     return true
   }
-  if (to.matched.some((r) => r.meta.requiresAuth)) {
+  if (to.matched.some((r) => r.meta.requiresAdmin)) {
     if (!(await ensureAuth())) {
-      return { path: '/admin/login', query: { redirect: to.fullPath } }
+      return { path: '/login', query: { redirect: to.fullPath } }
+    }
+    if (!isAdminUser()) {
+      return '/'
     }
   }
   return true

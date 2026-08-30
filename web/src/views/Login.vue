@@ -26,10 +26,10 @@
 <script setup>
 import { ref } from 'vue'
 import { useRouter, useRoute } from 'vue-router'
-import LangSwitch from '../../components/LangSwitch.vue'
-import { useI18n } from '../../i18n'
-import { adminApi } from '../../api'
-import { markAuthed } from '../../auth'
+import LangSwitch from '../components/LangSwitch.vue'
+import { useI18n } from '../i18n'
+import { authApi } from '../api'
+import { markAuthed } from '../auth'
 
 const { t } = useI18n()
 const router = useRouter()
@@ -44,10 +44,14 @@ async function submit() {
   busy.value = true
   error.value = ''
   try {
-    await adminApi.login(username.value, password.value)
-    markAuthed(true)
-    const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin'
-    await router.replace(redirect.startsWith('/admin') ? redirect : '/admin')
+    const me = await authApi.login(username.value, password.value)
+    markAuthed({ admin: !!me.is_admin, name: me.username || '' })
+    if (me.is_admin) {
+      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin'
+      await router.replace(redirect.startsWith('/admin') ? redirect : '/admin')
+      return
+    }
+    await router.replace('/')
   } catch (e) {
     error.value = e.message || t('auth.failed')
   } finally {

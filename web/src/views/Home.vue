@@ -10,7 +10,15 @@
       </div>
       <div class="top-actions">
         <LangSwitch />
-        <RouterLink to="/admin" class="admin-link">{{ t('nav.admin') }}</RouterLink>
+        <RouterLink v-if="authState.isAdmin" to="/admin" class="admin-link">{{ t('nav.admin') }}</RouterLink>
+        <button
+          v-else-if="authState.authed"
+          type="button"
+          class="admin-link"
+          :disabled="logoutBusy"
+          @click="logout"
+        >{{ t('auth.logout') }}</button>
+        <RouterLink v-else to="/login" class="admin-link">{{ t('nav.login') }}</RouterLink>
       </div>
     </header>
 
@@ -204,7 +212,8 @@
 
 <script setup>
 import { onMounted, onUnmounted, reactive, ref } from 'vue'
-import { publicApi, statusClass } from '../api'
+import { authApi, publicApi, statusClass } from '../api'
+import { authState, clearAuthState, markAuthed } from '../auth'
 import LangSwitch from '../components/LangSwitch.vue'
 import IconButton from '../components/IconButton.vue'
 import RegionPicker from '../components/RegionPicker.vue'
@@ -221,6 +230,7 @@ const cache = ref([])
 const queue = ref([])
 const loading = ref(false)
 const busy = ref(false)
+const logoutBusy = ref(false)
 const searched = ref(false)
 const activeJobs = reactive({})
 const cachedByBundle = reactive({})
@@ -519,12 +529,34 @@ function startPolling() {
 }
 
 onMounted(async () => {
+  await refreshAuth()
   await loadRegions()
   await loadCache()
   await pollQueue()
   setInterval(pollQueue, 3000)
 })
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
+
+async function refreshAuth() {
+  try {
+    const me = await authApi.me()
+    markAuthed({ admin: !!me?.is_admin, name: me?.username || '' })
+  } catch {
+    clearAuthState()
+  }
+}
+
+async function logout() {
+  logoutBusy.value = true
+  try {
+    await authApi.logout()
+  } catch {
+    /* ignore */
+  } finally {
+    clearAuthState()
+    logoutBusy.value = false
+  }
+}
 </script>
 
 <style scoped>
@@ -554,14 +586,18 @@ h1 { font-size: 1.35rem; margin: 0; font-weight: 650; line-height: 1.15; }
   flex-shrink: 0;
 }
 .admin-link {
-  font-size: .75rem;
+  font: inherit;
+  font-size: .68rem;
   color: var(--text-2);
-  padding: 0.38rem 0.65rem;
+  padding: 0.28rem 0.55rem;
   border: 1px solid var(--line);
   border-radius: 8px;
   text-decoration: none;
   line-height: 1.2;
+  background: transparent;
+  cursor: pointer;
 }
+.admin-link:disabled { opacity: 0.45; cursor: default; }
 .search-wrap { position: sticky; top: 0; z-index: 10; padding: .5rem 0 1rem; background: var(--bg); }
 .mode-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 .seg {

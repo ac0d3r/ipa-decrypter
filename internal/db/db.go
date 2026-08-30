@@ -43,7 +43,7 @@ func (d *DB) migrate() error {
 		&Device{},
 		&Secret{},
 		&Task{},
-		&AdminUser{},
+		&User{},
 	)
 }
 
@@ -105,30 +105,55 @@ func (d *DB) GetSecret(key string) (string, error) {
 	return s.Value, err
 }
 
-func (d *DB) CountAdminUsers() (int64, error) {
+func (d *DB) CountUsers() (int64, error) {
 	var n int64
-	err := d.gorm.Model(&AdminUser{}).Count(&n).Error
+	err := d.gorm.Model(&User{}).Count(&n).Error
 	return n, err
 }
 
-func (d *DB) CreateAdminUser(u AdminUser) error {
-	return d.gorm.Create(&u).Error
+func (d *DB) CreateUser(u *User) error {
+	return d.gorm.Create(u).Error
 }
 
-func (d *DB) UpdateAdminUser(u AdminUser) error {
+func (d *DB) UpdateUser(u User) error {
 	return d.gorm.Save(&u).Error
 }
 
-func (d *DB) GetAdminUserByUsername(username string) (AdminUser, error) {
-	var u AdminUser
+func (d *DB) GetUser(id string) (User, error) {
+	var u User
+	err := d.gorm.First(&u, "id = ?", id).Error
+	return u, err
+}
+
+func (d *DB) GetUserByUsername(username string) (User, error) {
+	var u User
 	err := d.gorm.First(&u, "username = ?", username).Error
 	return u, err
 }
 
-func (d *DB) GetAdminUserBySessionToken(token string) (AdminUser, error) {
-	var u AdminUser
+func (d *DB) GetUserBySessionToken(token string) (User, error) {
+	if token == "" {
+		return User{}, gorm.ErrRecordNotFound
+	}
+	var u User
 	err := d.gorm.First(&u, "session_token = ?", token).Error
 	return u, err
+}
+
+func (d *DB) ListUsers() ([]User, error) {
+	var out []User
+	err := d.gorm.Order("created_at ASC").Find(&out).Error
+	return out, err
+}
+
+func (d *DB) DeleteUser(id string) error {
+	return d.gorm.Delete(&User{}, "id = ?", id).Error
+}
+
+func (d *DB) CountAdmins() (int64, error) {
+	var n int64
+	err := d.gorm.Model(&User{}).Where("is_admin = ?", true).Count(&n).Error
+	return n, err
 }
 
 func MustJSON(v any) string {

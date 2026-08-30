@@ -5,6 +5,7 @@ import (
 	"encoding/hex"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
 	"github.com/ac0d3r/ipa-decrypter/internal/config"
@@ -12,6 +13,7 @@ import (
 	"github.com/ac0d3r/ipa-decrypter/internal/logger"
 	"github.com/google/uuid"
 	"golang.org/x/crypto/bcrypt"
+	"gorm.io/gorm"
 )
 
 const (
@@ -22,6 +24,8 @@ const (
 var (
 	ErrInvalidCredentials = errors.New("invalid username or password")
 	ErrUnauthorized       = errors.New("unauthorized")
+	ErrForbidden          = errors.New("forbidden")
+	ErrNotFound           = errors.New("not found")
 )
 
 type AuthService struct {
@@ -33,9 +37,9 @@ func NewAuthService(cfg config.Config, database *db.DB) *AuthService {
 	return &AuthService{cfg: cfg, db: database}
 }
 
-// EnsureBootstrapAdmin creates the first admin from env if none exist.
+// EnsureBootstrapAdmin creates the first admin from env if no users exist.
 func (s *AuthService) EnsureBootstrapAdmin() error {
-	n, err := s.db.CountAdminUsers()
+	n, err := s.db.CountUsers()
 	if err != nil {
 		return err
 	}
@@ -47,16 +51,7 @@ func (s *AuthService) EnsureBootstrapAdmin() error {
 	if username == "" || password == "" {
 		return fmt.Errorf("ADMIN_USERNAME and ADMIN_PASSWORD required to bootstrap admin")
 	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
-	if err != nil {
-		return err
-	}
-	u := db.AdminUser{
-		ID:           uuid.NewString(),
-		Username:     username,
-		PasswordHash: string(hash),
-	}
-	if err := s.db.CreateAdminUser(u); err != nil {
+	if _, err := s.createUser(username, password, true); err != nil {
 		return err
 	}
 	logger.WithComponent("auth").WithField("username", username).Info("bootstrapped admin user")
@@ -64,13 +59,14 @@ func (s *AuthService) EnsureBootstrapAdmin() error {
 }
 
 type LoginResult struct {
-	Token     string    `json:"-"`
-	Username  string    `json:"username"`
-	ExpiresAt time.Time `json:"expires_at"`
+	Token     string
+	Username  string
+	IsAdmin   bool
+	ExpiresAt time.Time
 }
 
 func (s *AuthService) Login(username, password string) (LoginResult, error) {
-	u, err := s.db.GetAdminUserByUsername(username)
+	u, err := s.db.GetUserByUsername(strings.TrimSpace(username))
 	if err != nil {
 		return LoginResult{}, ErrInvalidCredentials
 	}
@@ -84,38 +80,171 @@ func (s *AuthService) Login(username, password string) (LoginResult, error) {
 	expires := time.Now().Add(sessionTTL)
 	u.SessionToken = token
 	u.SessionExpiresAt = &expires
-	if err := s.db.UpdateAdminUser(u); err != nil {
+	if err := s.db.UpdateUser(u); err != nil {
 		return LoginResult{}, err
 	}
-	return LoginResult{Token: token, Username: u.Username, ExpiresAt: expires}, nil
+	return LoginResult{
+		Token:     token,
+		Username:  u.Username,
+		IsAdmin:   u.IsAdmin,
+		ExpiresAt: expires,
+	}, nil
 }
 
 func (s *AuthService) Logout(token string) error {
 	if token == "" {
 		return nil
 	}
-	u, err := s.db.GetAdminUserBySessionToken(token)
+	u, err := s.db.GetUserBySessionToken(token)
 	if err != nil {
 		return nil
 	}
 	u.SessionToken = ""
 	u.SessionExpiresAt = nil
-	return s.db.UpdateAdminUser(u)
+	return s.db.UpdateUser(u)
 }
 
-func (s *AuthService) Validate(token string) (db.AdminUser, error) {
+func (s *AuthService) Validate(token string) (db.User, error) {
 	if token == "" {
-		return db.AdminUser{}, ErrUnauthorized
+		return db.User{}, ErrUnauthorized
 	}
-	u, err := s.db.GetAdminUserBySessionToken(token)
+	u, err := s.db.GetUserBySessionToken(token)
 	if err != nil {
-		return db.AdminUser{}, ErrUnauthorized
+		return db.User{}, ErrUnauthorized
 	}
 	if u.SessionExpiresAt == nil || time.Now().After(*u.SessionExpiresAt) {
 		u.SessionToken = ""
 		u.SessionExpiresAt = nil
-		_ = s.db.UpdateAdminUser(u)
-		return db.AdminUser{}, ErrUnauthorized
+		_ = s.db.UpdateUser(u)
+		return db.User{}, ErrUnauthorized
+	}
+	return u, nil
+}
+
+func (s *AuthService) ValidateAdmin(token string) (db.User, error) {
+	u, err := s.Validate(token)
+	if err != nil {
+		return db.User{}, err
+	}
+	if !u.IsAdmin {
+		return db.User{}, ErrForbidden
+	}
+	return u, nil
+}
+
+type UserCreateInput struct {
+	Username string `json:"username"`
+	Password string `json:"password"`
+	IsAdmin  bool   `json:"is_admin"`
+}
+
+type UserUpdateInput struct {
+	Password *string `json:"password"`
+	IsAdmin  *bool   `json:"is_admin"`
+}
+
+func (s *AuthService) ListUsers() ([]db.User, error) {
+	items, err := s.db.ListUsers()
+	if err != nil {
+		return nil, err
+	}
+	if items == nil {
+		items = []db.User{}
+	}
+	return items, nil
+}
+
+func (s *AuthService) CreateUser(in UserCreateInput) (db.User, error) {
+	return s.createUser(in.Username, in.Password, in.IsAdmin)
+}
+
+func (s *AuthService) createUser(username, password string, isAdmin bool) (db.User, error) {
+	username = strings.TrimSpace(username)
+	if username == "" || password == "" {
+		return db.User{}, fmt.Errorf("username and password required")
+	}
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return db.User{}, err
+	}
+	u := db.User{
+		ID:           uuid.NewString(),
+		Username:     username,
+		PasswordHash: string(hash),
+		IsAdmin:      isAdmin,
+	}
+	if err := s.db.CreateUser(&u); err != nil {
+		if isUniqueViolation(err) {
+			return db.User{}, fmt.Errorf("username already exists")
+		}
+		return db.User{}, err
+	}
+	return u, nil
+}
+
+func (s *AuthService) UpdateUser(id string, in UserUpdateInput) (db.User, error) {
+	u, err := s.getUser(id)
+	if err != nil {
+		return db.User{}, err
+	}
+	if in.Password != nil {
+		pw := strings.TrimSpace(*in.Password)
+		if pw == "" {
+			return db.User{}, fmt.Errorf("password required")
+		}
+		hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+		if err != nil {
+			return db.User{}, err
+		}
+		u.PasswordHash = string(hash)
+		u.SessionToken = ""
+		u.SessionExpiresAt = nil
+	}
+	if in.IsAdmin != nil {
+		if u.IsAdmin && !*in.IsAdmin {
+			n, err := s.db.CountAdmins()
+			if err != nil {
+				return db.User{}, err
+			}
+			if n <= 1 {
+				return db.User{}, fmt.Errorf("cannot demote the last admin")
+			}
+		}
+		u.IsAdmin = *in.IsAdmin
+	}
+	if err := s.db.UpdateUser(u); err != nil {
+		return db.User{}, err
+	}
+	return u, nil
+}
+
+func (s *AuthService) DeleteUser(id, actorID string) error {
+	u, err := s.getUser(id)
+	if err != nil {
+		return err
+	}
+	if u.ID == actorID {
+		return fmt.Errorf("cannot delete yourself")
+	}
+	if u.IsAdmin {
+		n, err := s.db.CountAdmins()
+		if err != nil {
+			return err
+		}
+		if n <= 1 {
+			return fmt.Errorf("cannot delete the last admin")
+		}
+	}
+	return s.db.DeleteUser(id)
+}
+
+func (s *AuthService) getUser(id string) (db.User, error) {
+	u, err := s.db.GetUser(id)
+	if err != nil {
+		if errors.Is(err, gorm.ErrRecordNotFound) {
+			return db.User{}, ErrNotFound
+		}
+		return db.User{}, err
 	}
 	return u, nil
 }
@@ -126,4 +255,9 @@ func randomToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func isUniqueViolation(err error) bool {
+	msg := strings.ToLower(err.Error())
+	return strings.Contains(msg, "unique") || strings.Contains(msg, "constraint failed")
 }

@@ -68,18 +68,19 @@ type Secret struct {
 
 func (Secret) TableName() string { return "secrets" }
 
-// AdminUser is the web admin panel operator (not an Apple ID).
-type AdminUser struct {
+// User is a web login account. Admins access the backend via IsAdmin.
+type User struct {
 	ID               string     `gorm:"primaryKey" json:"id"`
 	Username         string     `gorm:"uniqueIndex;size:64" json:"username"`
 	PasswordHash     string     `json:"-"`
+	IsAdmin          bool       `json:"is_admin"`
 	SessionToken     string     `gorm:"index;size:64" json:"-"`
-	SessionExpiresAt *time.Time `json:"expires_at,omitempty"`
+	SessionExpiresAt *time.Time `json:"-"`
 	CreatedAt        time.Time  `json:"created_at"`
 	UpdatedAt        time.Time  `json:"updated_at"`
 }
 
-func (AdminUser) TableName() string { return "admin_users" }
+func (User) TableName() string { return "users" }
 
 type RegionInfo struct {
 	Code  string `json:"code"`

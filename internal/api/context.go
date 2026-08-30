@@ -9,13 +9,13 @@ import (
 
 type ctxKey int
 
-const adminUserKey ctxKey = 1
+const userKey ctxKey = 1
 
-func withAdminUser(ctx context.Context, u db.AdminUser) context.Context {
-	return context.WithValue(ctx, adminUserKey, u)
+func withUser(ctx context.Context, u db.User) context.Context {
+	return context.WithValue(ctx, userKey, u)
 }
 
-func adminUserFromContext(r *http.Request) (db.AdminUser, bool) {
-	u, ok := r.Context().Value(adminUserKey).(db.AdminUser)
+func userFromContext(r *http.Request) (db.User, bool) {
+	u, ok := r.Context().Value(userKey).(db.User)
 	return u, ok
 }

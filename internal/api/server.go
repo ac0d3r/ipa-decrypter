@@ -26,6 +26,7 @@ func (s *Server) Handler() http.Handler {
 
 	// Admin / backend management (auth required)
 	s.registerAdminRoutes(mux, "/api/v1/admin")
+	s.registerUserAdminRoutes(mux)
 
 	if s.WebDir != "" {
 		fs := http.FileServer(http.Dir(s.WebDir))

@@ -2,6 +2,7 @@ package api
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 	"time"
@@ -9,15 +10,15 @@ import (
 	"github.com/ac0d3r/ipa-decrypter/internal/services"
 )
 
-const adminSessionCookie = "admin_session"
+const sessionCookie = "session"
 
 func (s *Server) registerAuthRoutes(mux *http.ServeMux) {
-	mux.HandleFunc("POST /api/v1/admin/login", s.handleAdminLogin)
-	mux.HandleFunc("POST /api/v1/admin/logout", s.handleAdminLogout)
-	mux.HandleFunc("GET /api/v1/admin/me", s.requireAdmin(s.handleAdminMe))
+	mux.HandleFunc("POST /api/v1/auth/login", s.handleLogin)
+	mux.HandleFunc("POST /api/v1/auth/logout", s.handleLogout)
+	mux.HandleFunc("GET /api/v1/auth/me", s.requireAuth(s.handleMe))
 }
 
-func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleLogin(w http.ResponseWriter, r *http.Request) {
 	var body struct {
 		Username string `json:"username"`
 		Password string `json:"password"`
@@ -33,54 +34,71 @@ func (s *Server) handleAdminLogin(w http.ResponseWriter, r *http.Request) {
 	}
 	result, err := s.Auth.Login(body.Username, body.Password)
 	if err != nil {
-		if err == services.ErrInvalidCredentials {
+		if errors.Is(err, services.ErrInvalidCredentials) {
 			writeErr(w, errStatus(http.StatusUnauthorized, "invalid username or password"))
 			return
 		}
 		writeErr(w, err)
 		return
 	}
-	setAdminSessionCookie(w, result.Token, result.ExpiresAt)
+	setSessionCookie(w, result.Token, result.ExpiresAt)
 	writeJSON(w, http.StatusOK, map[string]any{
 		"username":   result.Username,
+		"is_admin":   result.IsAdmin,
 		"expires_at": result.ExpiresAt,
 	})
 }
 
-func (s *Server) handleAdminLogout(w http.ResponseWriter, r *http.Request) {
-	token := adminSessionToken(r)
-	_ = s.Auth.Logout(token)
-	clearAdminSessionCookie(w)
+func (s *Server) handleLogout(w http.ResponseWriter, r *http.Request) {
+	_ = s.Auth.Logout(sessionToken(r))
+	clearSessionCookie(w)
 	w.WriteHeader(http.StatusNoContent)
 }
 
-func (s *Server) handleAdminMe(w http.ResponseWriter, r *http.Request) {
-	u, ok := adminUserFromContext(r)
+func (s *Server) handleMe(w http.ResponseWriter, r *http.Request) {
+	u, ok := userFromContext(r)
 	if !ok {
 		writeErr(w, errStatus(http.StatusUnauthorized, "unauthorized"))
 		return
 	}
-	payload := map[string]any{"username": u.Username}
+	payload := map[string]any{
+		"username": u.Username,
+		"is_admin": u.IsAdmin,
+	}
 	if u.SessionExpiresAt != nil {
 		payload["expires_at"] = *u.SessionExpiresAt
 	}
 	writeJSON(w, http.StatusOK, payload)
 }
 
-func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+func (s *Server) requireAuth(next http.HandlerFunc) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		token := adminSessionToken(r)
-		u, err := s.Auth.Validate(token)
+		u, err := s.Auth.Validate(sessionToken(r))
 		if err != nil {
 			writeErr(w, errStatus(http.StatusUnauthorized, "unauthorized"))
 			return
 		}
-		next(w, r.WithContext(withAdminUser(r.Context(), u)))
+		next(w, r.WithContext(withUser(r.Context(), u)))
 	}
 }
 
-func adminSessionToken(r *http.Request) string {
-	if c, err := r.Cookie(adminSessionCookie); err == nil && c.Value != "" {
+func (s *Server) requireAdmin(next http.HandlerFunc) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		u, err := s.Auth.ValidateAdmin(sessionToken(r))
+		if err != nil {
+			if errors.Is(err, services.ErrForbidden) {
+				writeErr(w, errStatus(http.StatusForbidden, "forbidden"))
+				return
+			}
+			writeErr(w, errStatus(http.StatusUnauthorized, "unauthorized"))
+			return
+		}
+		next(w, r.WithContext(withUser(r.Context(), u)))
+	}
+}
+
+func sessionToken(r *http.Request) string {
+	if c, err := r.Cookie(sessionCookie); err == nil && c.Value != "" {
 		return c.Value
 	}
 	auth := r.Header.Get("Authorization")
@@ -90,9 +108,9 @@ func adminSessionToken(r *http.Request) string {
 	return ""
 }
 
-func setAdminSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
+func setSessionCookie(w http.ResponseWriter, token string, expires time.Time) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     adminSessionCookie,
+		Name:     sessionCookie,
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
@@ -102,9 +120,9 @@ func setAdminSessionCookie(w http.ResponseWriter, token string, expires time.Tim
 	})
 }
 
-func clearAdminSessionCookie(w http.ResponseWriter) {
+func clearSessionCookie(w http.ResponseWriter) {
 	http.SetCookie(w, &http.Cookie{
-		Name:     adminSessionCookie,
+		Name:     sessionCookie,
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
