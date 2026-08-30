@@ -12,6 +12,8 @@ type Config struct {
 	DataDir            string
 	IPATOOLBin         string
 	KeychainPassphrase string
+	AdminUsername      string
+	AdminPassword      string
 	DBPath             string
 	AccountsDir        string
 	IPAsDir            string
@@ -32,6 +34,8 @@ func Load() (Config, error) {
 		DecryptedDir: filepath.Join(dataDir, "decrypted"),
 
 		KeychainPassphrase: env("KEYCHAIN_PASSPHRASE", "ipatool-ipa-decrypter"),
+		AdminUsername:      env("ADMIN_USERNAME", "admin"),
+		AdminPassword:      env("ADMIN_PASSWORD", "admin"),
 	}
 	for _, dir := range []string{cfg.DataDir, cfg.AccountsDir, cfg.IPAsDir, cfg.DecryptedDir} {
 		if err := os.MkdirAll(dir, 0o700); err != nil {

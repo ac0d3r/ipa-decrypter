@@ -43,6 +43,7 @@ func (d *DB) migrate() error {
 		&Device{},
 		&Secret{},
 		&Task{},
+		&AdminUser{},
 	)
 }
 
@@ -102,6 +103,32 @@ func (d *DB) GetSecret(key string) (string, error) {
 	var s Secret
 	err := d.gorm.First(&s, "key = ?", key).Error
 	return s.Value, err
+}
+
+func (d *DB) CountAdminUsers() (int64, error) {
+	var n int64
+	err := d.gorm.Model(&AdminUser{}).Count(&n).Error
+	return n, err
+}
+
+func (d *DB) CreateAdminUser(u AdminUser) error {
+	return d.gorm.Create(&u).Error
+}
+
+func (d *DB) UpdateAdminUser(u AdminUser) error {
+	return d.gorm.Save(&u).Error
+}
+
+func (d *DB) GetAdminUserByUsername(username string) (AdminUser, error) {
+	var u AdminUser
+	err := d.gorm.First(&u, "username = ?", username).Error
+	return u, err
+}
+
+func (d *DB) GetAdminUserBySessionToken(token string) (AdminUser, error) {
+	var u AdminUser
+	err := d.gorm.First(&u, "session_token = ?", token).Error
+	return u, err
 }
 
 func MustJSON(v any) string {

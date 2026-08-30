@@ -22,11 +22,10 @@ func (s *Server) Handler() http.Handler {
 	mux.HandleFunc("GET /health", s.handleHealth)
 
 	s.registerPublicRoutes(mux)
+	s.registerAuthRoutes(mux)
 
-	// Admin / backend management
+	// Admin / backend management (auth required)
 	s.registerAdminRoutes(mux, "/api/v1/admin")
-	// Legacy paths (same handlers)
-	s.registerAdminRoutes(mux, "/api/v1")
 
 	if s.WebDir != "" {
 		fs := http.FileServer(http.Dir(s.WebDir))
@@ -48,22 +47,22 @@ func (s *Server) Handler() http.Handler {
 }
 
 func (s *Server) registerAdminRoutes(mux *http.ServeMux, prefix string) {
-	mux.HandleFunc("GET "+prefix+"/accounts", s.handleListAccounts)
-	mux.HandleFunc("POST "+prefix+"/accounts", s.handleCreateAccount)
-	mux.HandleFunc("GET "+prefix+"/accounts/{id}", s.handleGetAccount)
-	mux.HandleFunc("POST "+prefix+"/accounts/{id}/login", s.handleLoginAccount)
-	mux.HandleFunc("POST "+prefix+"/accounts/{id}/refresh", s.handleRefreshAccount)
-	mux.HandleFunc("POST "+prefix+"/accounts/{id}/revoke", s.handleRevokeAccount)
-	mux.HandleFunc("DELETE "+prefix+"/accounts/{id}", s.handleDeleteAccount)
+	mux.HandleFunc("GET "+prefix+"/accounts", s.requireAdmin(s.handleListAccounts))
+	mux.HandleFunc("POST "+prefix+"/accounts", s.requireAdmin(s.handleCreateAccount))
+	mux.HandleFunc("GET "+prefix+"/accounts/{id}", s.requireAdmin(s.handleGetAccount))
+	mux.HandleFunc("POST "+prefix+"/accounts/{id}/login", s.requireAdmin(s.handleLoginAccount))
+	mux.HandleFunc("POST "+prefix+"/accounts/{id}/refresh", s.requireAdmin(s.handleRefreshAccount))
+	mux.HandleFunc("POST "+prefix+"/accounts/{id}/revoke", s.requireAdmin(s.handleRevokeAccount))
+	mux.HandleFunc("DELETE "+prefix+"/accounts/{id}", s.requireAdmin(s.handleDeleteAccount))
 
-	mux.HandleFunc("GET "+prefix+"/devices", s.handleListDevices)
-	mux.HandleFunc("POST "+prefix+"/devices", s.handleCreateDevice)
-	mux.HandleFunc("GET "+prefix+"/devices/{id}", s.handleGetDevice)
-	mux.HandleFunc("PUT "+prefix+"/devices/{id}", s.handleUpdateDevice)
-	mux.HandleFunc("POST "+prefix+"/devices/{id}/health", s.handleHealthDevice)
-	mux.HandleFunc("DELETE "+prefix+"/devices/{id}", s.handleDeleteDevice)
+	mux.HandleFunc("GET "+prefix+"/devices", s.requireAdmin(s.handleListDevices))
+	mux.HandleFunc("POST "+prefix+"/devices", s.requireAdmin(s.handleCreateDevice))
+	mux.HandleFunc("GET "+prefix+"/devices/{id}", s.requireAdmin(s.handleGetDevice))
+	mux.HandleFunc("PUT "+prefix+"/devices/{id}", s.requireAdmin(s.handleUpdateDevice))
+	mux.HandleFunc("POST "+prefix+"/devices/{id}/health", s.requireAdmin(s.handleHealthDevice))
+	mux.HandleFunc("DELETE "+prefix+"/devices/{id}", s.requireAdmin(s.handleDeleteDevice))
 
-	mux.HandleFunc("GET "+prefix+"/tasks", s.handleAdminTasks)
+	mux.HandleFunc("GET "+prefix+"/tasks", s.requireAdmin(s.handleAdminTasks))
 }
 
 func (s *Server) handleAdminTasks(w http.ResponseWriter, r *http.Request) {
@@ -283,7 +282,7 @@ func withCORS(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Access-Control-Allow-Origin", "*")
 		w.Header().Set("Access-Control-Allow-Methods", "GET,POST,PUT,DELETE,OPTIONS")
-		w.Header().Set("Access-Control-Allow-Headers", "Content-Type")
+		w.Header().Set("Access-Control-Allow-Headers", "Content-Type, Authorization")
 		if r.Method == http.MethodOptions {
 			w.WriteHeader(http.StatusNoContent)
 			return

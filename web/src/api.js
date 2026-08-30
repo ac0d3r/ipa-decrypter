@@ -10,16 +10,28 @@ export class ApiError extends Error {
   }
 }
 
+let onUnauthorized = null
+
+/** Register a handler invoked when an authenticated admin request returns 401. */
+export function setUnauthorizedHandler(fn) {
+  onUnauthorized = fn
+}
+
 async function request(path, options = {}) {
+  const { skipAuthRedirect, ...fetchOpts } = options
   const res = await fetch(BASE + path, {
-    headers: { 'Content-Type': 'application/json', ...(options.headers || {}) },
-    ...options,
+    credentials: 'same-origin',
+    headers: { 'Content-Type': 'application/json', ...(fetchOpts.headers || {}) },
+    ...fetchOpts,
   })
   if (res.status === 204) return null
   const text = await res.text()
   let data = null
   try { data = text ? JSON.parse(text) : null } catch { data = { error: text } }
   if (!res.ok) {
+    if (res.status === 401 && !skipAuthRedirect && onUnauthorized) {
+      onUnauthorized()
+    }
     throw new ApiError(data?.error || res.statusText, {
       status: res.status,
       needs2FA: !!data?.needs_2fa,
@@ -60,6 +72,14 @@ export const publicApi = {
 
 // --- Admin (后台) ---
 export const adminApi = {
+  login: (username, password) => request('/api/v1/admin/login', {
+    method: 'POST',
+    body: JSON.stringify({ username, password }),
+    skipAuthRedirect: true,
+  }),
+  logout: () => request('/api/v1/admin/logout', { method: 'POST', skipAuthRedirect: true }),
+  me: () => request('/api/v1/admin/me', { skipAuthRedirect: true }),
+
   listAccounts: () => request('/api/v1/admin/accounts'),
   createAccount: (body) => request('/api/v1/admin/accounts', { method: 'POST', body: JSON.stringify(body) }),
   loginAccount: (id, auth_code = '') => request(`/api/v1/admin/accounts/${id}/login`, { method: 'POST', body: JSON.stringify({ auth_code }) }),

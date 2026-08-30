@@ -11,6 +11,7 @@ type Registry struct {
 	Devices  *DeviceService
 	Tasks    *TaskService
 	Versions *VersionService
+	Auth     *AuthService
 }
 
 func NewRegistry(cfg config.Config, database *db.DB) *Registry {
@@ -18,10 +19,12 @@ func NewRegistry(cfg config.Config, database *db.DB) *Registry {
 	devices := NewDeviceService(database)
 	tasks := NewTaskService(cfg, database, accounts, devices)
 	versions := NewVersionService(accounts)
+	auth := NewAuthService(cfg, database)
 	return &Registry{
 		Accounts: accounts,
 		Devices:  devices,
 		Tasks:    tasks,
 		Versions: versions,
+		Auth:     auth,
 	}
 }

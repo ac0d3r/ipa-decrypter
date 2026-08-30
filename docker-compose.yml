@@ -14,4 +14,6 @@ services:
       WEB_DIR: /app/web/dist
       IPATOOL_BIN: /usr/local/bin/ipatool
       KEYCHAIN_PASSPHRASE: ${KEYCHAIN_PASSPHRASE:-ipatool-ipa-decrypter}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
     restart: unless-stopped

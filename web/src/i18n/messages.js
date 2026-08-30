@@ -12,6 +12,14 @@ export const messages = {
       devices: '解密设备',
       tasks: '任务记录',
     },
+    auth: {
+      title: '管理员登录',
+      hint: '访问后台需要管理员账号',
+      username: '用户名',
+      password: '密码',
+      logout: '退出登录',
+      failed: '登录失败',
+    },
     common: {
       add: '添加',
       refresh: '刷新',
@@ -130,6 +138,14 @@ export const messages = {
       accounts: 'Apple Accounts',
       devices: 'Decrypt Devices',
       tasks: 'Tasks',
+    },
+    auth: {
+      title: 'Admin login',
+      hint: 'Admin credentials required',
+      username: 'Username',
+      password: 'Password',
+      logout: 'Log out',
+      failed: 'Login failed',
     },
     common: {
       add: 'Add',

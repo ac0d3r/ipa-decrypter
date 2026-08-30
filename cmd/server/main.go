@@ -25,6 +25,9 @@ func main() {
 	defer database.Close()
 
 	svc := services.NewRegistry(cfg, database)
+	if err := svc.Auth.EnsureBootstrapAdmin(); err != nil {
+		log.WithError(err).Fatal("bootstrap admin failed")
+	}
 
 	srv := &api.Server{
 		Registry: svc,
