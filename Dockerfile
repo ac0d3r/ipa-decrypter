@@ -18,7 +18,7 @@ RUN git apply --check /tmp/keyring-backend-flag.patch \
     && git apply /tmp/keyring-backend-flag.patch
 RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /ipatool .
 
-FROM golang:1.24-alpine AS backend
+FROM golang:1.25-alpine AS backend
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

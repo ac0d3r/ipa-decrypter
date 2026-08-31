@@ -39,7 +39,7 @@ func main() {
 		"data":   cfg.DataDir,
 	}).Info("ipa-decrypter starting")
 
-	if err := http.ListenAndServe(cfg.ListenAddr, srv.Handler()); err != nil {
+	if err := http.ListenAndServe(cfg.ListenAddr, srv.Engine()); err != nil {
 		log.WithError(err).Fatal("http server stopped")
 	}
 }
