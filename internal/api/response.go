@@ -1,11 +1,13 @@
 package api
 
 import (
+	"errors"
 	"net/http"
 	"strings"
 
 	"github.com/gin-gonic/gin"
 
+	"github.com/ac0d3r/ipa-decrypter/internal/db"
 	"github.com/ac0d3r/ipa-decrypter/internal/services"
 )
 
@@ -20,20 +22,25 @@ func errStatus(code int, msg string) error {
 	return apiError{status: code, message: msg}
 }
 
-func writeJSON(c *gin.Context, code int, v any) {
-	c.JSON(code, v)
-}
-
 func writeErr(c *gin.Context, err error) {
 	code := http.StatusBadRequest
 	msg := err.Error()
-	if ae, ok := err.(apiError); ok {
-		code = ae.status
-		msg = ae.message
-	}
-	if strings.Contains(strings.ToLower(msg), "not found") {
-		code = http.StatusNotFound
-		msg = "not found"
+	switch {
+	case errors.Is(err, db.ErrQuotaExceeded):
+		code = http.StatusTooManyRequests
+		msg = "quota exceeded"
+	case errors.Is(err, services.ErrDecryptBusy):
+		code = http.StatusConflict
+		msg = "decrypt already in progress"
+	default:
+		if ae, ok := err.(apiError); ok {
+			code = ae.status
+			msg = ae.message
+		}
+		if strings.Contains(strings.ToLower(msg), "not found") {
+			code = http.StatusNotFound
+			msg = "not found"
+		}
 	}
 	c.JSON(code, gin.H{"error": msg})
 }

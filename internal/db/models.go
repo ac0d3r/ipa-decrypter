@@ -57,6 +57,8 @@ type Task struct {
 	OutputPath        string    `json:"output_path,omitempty"`    // decrypted IPA
 	EncryptedPath     string    `json:"encrypted_path,omitempty"` // downloaded encrypted IPA
 	Logs              []string  `gorm:"serializer:json" json:"logs"`
+	OwnerUserID       string    `json:"-"` // user who started this decrypt (quota)
+	DecryptCharged    bool      `json:"-"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -70,14 +72,18 @@ func (Secret) TableName() string { return "secrets" }
 
 // User is a web login account. Admins access the backend via IsAdmin.
 type User struct {
-	ID               string     `gorm:"primaryKey" json:"id"`
-	Username         string     `gorm:"uniqueIndex;size:64" json:"username"`
-	PasswordHash     string     `json:"-"`
-	IsAdmin          bool       `json:"is_admin"`
-	SessionToken     string     `gorm:"index;size:64" json:"-"`
-	SessionExpiresAt *time.Time `json:"-"`
-	CreatedAt        time.Time  `json:"created_at"`
-	UpdatedAt        time.Time  `json:"updated_at"`
+	ID                 string     `gorm:"primaryKey" json:"id"`
+	Username           string     `gorm:"uniqueIndex;size:64" json:"username"`
+	PasswordHash       string     `json:"-"`
+	IsAdmin            bool       `json:"is_admin"`
+	DecryptLimit       int        `gorm:"column:daily_decrypt_limit" json:"decrypt_limit"`   // total lifetime; -1 unlimited; 0 → default
+	DownloadLimit      int        `gorm:"column:daily_download_limit" json:"download_limit"` // total lifetime; -1 unlimited; 0 → default
+	Decrypts           int        `json:"decrypts"`
+	Downloads          int        `json:"downloads"`
+	SessionToken       string     `gorm:"index;size:64" json:"-"`
+	SessionExpiresAt   *time.Time `json:"-"`
+	CreatedAt          time.Time  `json:"created_at"`
+	UpdatedAt          time.Time  `json:"updated_at"`
 }
 
 func (User) TableName() string { return "users" }

@@ -40,7 +40,7 @@ async function ensureAuth() {
   if (isAuthChecked()) return isAuthed()
   try {
     const me = await authApi.me()
-    markAuthed({ admin: !!me?.is_admin, name: me?.username || '' })
+    markAuthed({ admin: !!me?.is_admin, name: me?.username || '', quota: me?.quota || null })
   } catch {
     clearAuthState()
   }
@@ -50,7 +50,7 @@ async function ensureAuth() {
 setUnauthorizedHandler(() => {
   clearAuthState()
   const path = router.currentRoute.value.path
-  if (path.startsWith('/admin')) {
+  if (path !== '/login') {
     router.replace({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } })
   }
 })

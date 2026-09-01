@@ -11,16 +11,12 @@
       <div class="top-actions">
         <LangSwitch />
         <RouterLink v-if="authState.isAdmin" to="/admin" class="admin-link">{{ t('nav.admin') }}</RouterLink>
-        <button
-          v-else-if="authState.authed"
-          type="button"
-          class="admin-link"
-          :disabled="logoutBusy"
-          @click="logout"
-        >{{ t('auth.logout') }}</button>
+        <UserMenu v-else-if="authState.authed" />
         <RouterLink v-else to="/login" class="admin-link">{{ t('nav.login') }}</RouterLink>
       </div>
     </header>
+
+    <p v-if="notice" class="page-notice" role="alert">{{ notice }}</p>
 
     <div class="search-wrap">
       <div class="mode-row">
@@ -74,7 +70,11 @@
               <div class="app-bundle">{{ c.bundle_id }}</div>
             </div>
             <div class="app-action">
-              <a class="btn btn-dl" :href="publicApi.taskFileURL(c.id)">{{ t('home.download') }}</a>
+              <a
+                class="btn btn-dl"
+                href="#"
+                @click.prevent="downloadTask(c.id)"
+              >{{ t('home.download') }}</a>
             </div>
           </div>
         </article>
@@ -104,13 +104,10 @@
             <div class="app-name">{{ app.name }}</div>
             <div class="app-meta">
               v{{ app.version }} · {{ fmtSize(app.size_bytes) }} · {{ app.seller }}
-              <span v-if="latestCachedLabel(app.bundle_id)" class="cached-hint">
-                · {{ t('home.cachedLabel', { version: latestCachedLabel(app.bundle_id) }) }}
-              </span>
             </div>
             <div class="app-bundle">{{ app.bundle_id }}</div>
           </div>
-          <div class="app-action">
+            <div class="app-action">
             <template v-if="!activeJobs[app.bundle_id]">
               <button
                 class="btn btn-go"
@@ -138,10 +135,11 @@
             <a
               v-else-if="activeJobs[app.bundle_id]?.status === 'completed'"
               class="btn btn-dl"
-              :href="publicApi.taskFileURL(activeJobs[app.bundle_id].id)"
+              href="#"
+              @click.prevent="downloadTask(activeJobs[app.bundle_id].id)"
             >{{ t('home.download') }}</a>
             <button v-else class="btn btn-go" disabled>{{ t('home.processing') }}</button>
-          </div>
+            </div>
         </div>
         <div v-if="expandedVersions[app.bundle_id]" class="versions-panel">
           <div v-if="versionState(app.bundle_id).loading" class="versions-loading">
@@ -192,6 +190,7 @@
       <div class="cached-picker panel">
         <h2>{{ t('home.cached') }}</h2>
         <p class="muted">{{ cachedModal.appName }}</p>
+        <p v-if="notice" class="page-notice" role="alert">{{ notice }}</p>
         <div class="cached-header">
           {{ t('home.cachedHeader', { count: cachedFor(cachedModal.bundleId).length }) }}
         </div>
@@ -203,7 +202,11 @@
           <span v-if="cachedVersionLabel(item)" class="cached-ver">{{ cachedVersionLabel(item) }}</span>
           <CountryFlag :code="item.region" />
           <span class="cached-size">{{ fmtSize(item.size_bytes) }}</span>
-          <a class="btn btn-dl btn-sm" :href="publicApi.taskFileURL(item.id)">{{ t('home.download') }}</a>
+          <a
+            class="btn btn-dl btn-sm"
+            href="#"
+            @click.prevent="downloadTask(item.id)"
+          >{{ t('home.download') }}</a>
         </div>
       </div>
     </div>
@@ -211,16 +214,25 @@
 </template>
 
 <script setup>
-import { onMounted, onUnmounted, reactive, ref } from 'vue'
-import { authApi, publicApi, statusClass } from '../api'
+import { onMounted, onUnmounted, reactive, ref, computed } from 'vue'
+import { useRouter } from 'vue-router'
+import { authApi, publicApi, statusClass, ApiError } from '../api'
 import { authState, clearAuthState, markAuthed } from '../auth'
 import LangSwitch from '../components/LangSwitch.vue'
 import IconButton from '../components/IconButton.vue'
 import RegionPicker from '../components/RegionPicker.vue'
 import CountryFlag from '../components/CountryFlag.vue'
+import UserMenu from '../components/UserMenu.vue'
 import { useI18n } from '../i18n'
 
 const { t } = useI18n()
+const router = useRouter()
+const loginTarget = computed(() => ({ path: '/login', query: { redirect: router.currentRoute.value.fullPath } }))
+
+async function requireLogin() {
+  await router.push(loginTarget.value)
+}
+
 const mode = ref('search')
 const region = ref('us')
 const query = ref('')
@@ -230,8 +242,53 @@ const cache = ref([])
 const queue = ref([])
 const loading = ref(false)
 const busy = ref(false)
-const logoutBusy = ref(false)
 const searched = ref(false)
+const notice = ref('')
+const downloadBusy = ref(false)
+
+function noticeFromError(e, kind = 'download') {
+  if (e instanceof ApiError && (e.status === 429 || /quota/i.test(e.message || ''))) {
+    return t(kind === 'decrypt' ? 'home.quotaExceededDecrypt' : 'home.quotaExceededDownload')
+  }
+  if (kind === 'decrypt' && e instanceof ApiError && e.status === 409) {
+    return t('home.decryptBusy')
+  }
+  return e?.message || t('home.downloadFailed')
+}
+
+async function refreshQuota() {
+  try {
+    const me = await authApi.me()
+    if (me) authState.quota = me.quota || null
+  } catch {
+    /* ignore */
+  }
+}
+
+async function downloadTask(id) {
+  if (!authState.authed) {
+    await requireLogin()
+    return
+  }
+  if (downloadBusy.value) return
+  notice.value = ''
+  downloadBusy.value = true
+  try {
+    await publicApi.checkTaskFile(id)
+    window.location.assign(publicApi.taskFileURL(id))
+    await new Promise((r) => setTimeout(r, 1200))
+    await refreshQuota()
+  } catch (e) {
+    if (e instanceof ApiError && e.status === 401) {
+      await requireLogin()
+      return
+    }
+    notice.value = noticeFromError(e, 'download')
+    if (e instanceof ApiError && e.status === 429) await refreshQuota()
+  } finally {
+    downloadBusy.value = false
+  }
+}
 const activeJobs = reactive({})
 const cachedByBundle = reactive({})
 const expandedVersions = reactive({})
@@ -272,6 +329,10 @@ function decryptDisabled(app) {
 }
 
 async function onDecrypt(app) {
+  if (!authState.authed) {
+    await requireLogin()
+    return
+  }
   if (expandedVersions[app.bundle_id]) {
     const sel = versionState(app.bundle_id).selected
     if (!sel) return
@@ -283,6 +344,10 @@ async function onDecrypt(app) {
 }
 
 async function toggleVersions(app) {
+  if (!authState.authed) {
+    await requireLogin()
+    return
+  }
   const id = app.bundle_id
   expandedVersions[id] = !expandedVersions[id]
   if (expandedVersions[id]) await loadVersions(app)
@@ -394,12 +459,6 @@ function cachedFor(bundleId) {
   return cachedByBundle[bundleId] || []
 }
 
-function latestCachedLabel(bundleId) {
-  const items = cachedFor(bundleId)
-  if (!items.length) return ''
-  return cachedVersionLabel(items[0])
-}
-
 function cachedVersionLabel(item) {
   if (item.display_version) return `v${item.display_version}`
   if (item.external_version_id) return item.external_version_id
@@ -474,6 +533,7 @@ async function runSearch() {
 }
 
 async function startDecrypt(app, ver) {
+  notice.value = ''
   busy.value = true
   try {
     const body = {
@@ -495,8 +555,8 @@ async function startDecrypt(app, ver) {
     startPolling()
     await pollJob(job.id, app.bundle_id)
   } catch (e) {
-    alert(e.message)
-    throw e
+    notice.value = noticeFromError(e, 'decrypt')
+    if (e instanceof ApiError && e.status === 429) await refreshQuota()
   } finally {
     busy.value = false
   }
@@ -509,6 +569,7 @@ async function pollJob(id, bundleId) {
     if (!isDone(j)) return
     await loadCache()
     if (results.value.length) await loadCachedForResults(results.value)
+    if (j.status === 'completed') await refreshQuota()
   } catch {}
 }
 
@@ -540,21 +601,9 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 async function refreshAuth() {
   try {
     const me = await authApi.me()
-    markAuthed({ admin: !!me?.is_admin, name: me?.username || '' })
+    markAuthed({ admin: !!me?.is_admin, name: me?.username || '', quota: me?.quota || null })
   } catch {
     clearAuthState()
-  }
-}
-
-async function logout() {
-  logoutBusy.value = true
-  try {
-    await authApi.logout()
-  } catch {
-    /* ignore */
-  } finally {
-    clearAuthState()
-    logoutBusy.value = false
   }
 }
 </script>
@@ -598,6 +647,15 @@ h1 { font-size: 1.35rem; margin: 0; font-weight: 650; line-height: 1.15; }
   cursor: pointer;
 }
 .admin-link:disabled { opacity: 0.45; cursor: default; }
+.page-notice {
+  margin: 0 0 0.75rem;
+  padding: 0.5rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid #4a2020;
+  background: #2a1414;
+  color: var(--red);
+  font-size: 0.78rem;
+}
 .search-wrap { position: sticky; top: 0; z-index: 10; padding: .5rem 0 1rem; background: var(--bg); }
 .mode-row { display: flex; gap: .5rem; align-items: center; margin-bottom: .5rem; }
 .seg {
@@ -644,7 +702,6 @@ h1 { font-size: 1.35rem; margin: 0; font-weight: 650; line-height: 1.15; }
 .app-info { flex: 1; min-width: 0; }
 .app-name { font-weight: 590; font-size: .88rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .app-meta { color: var(--text-3); font-size: .68rem; margin-top: .15rem; }
-.cached-hint { color: #f5a623; }
 .meta-region {
   display: inline-flex;
   align-items: center;

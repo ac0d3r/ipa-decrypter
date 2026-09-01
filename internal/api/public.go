@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"os"
 	"strconv"
 	"strings"
 
@@ -13,14 +14,17 @@ import (
 
 func (s *Server) registerPublicRoutes(r gin.IRouter) {
 	v1 := r.Group("/api/v1")
-	v1.GET("/search", s.handleSearch)
-	v1.GET("/regions", s.handleRegions)
-	v1.GET("/versions", s.handleVersions)
-	v1.GET("/cache", s.handleCache)
-	v1.POST("/request", s.handleRequest)
 	v1.GET("/queue", s.handleQueue)
-	v1.GET("/tasks/:id/file", s.handleTaskFile)
-	v1.GET("/tasks/:id", s.handleTask)
+	v1.GET("/cache", s.handleCache)
+	v1.GET("/regions", s.handleRegions)
+	v1.GET("/search", s.rateLimit(searchRateMax), s.handleSearch)
+
+	authed := v1.Group("", s.requireAuth())
+	authed.GET("/versions", s.rateLimit(versionRateMax), s.handleVersions)
+	authed.POST("/request", s.rateLimit(coreAPIRateMax), s.quotaMiddleware("decrypt"), s.handleRequest)
+	authed.GET("/tasks/:id", s.handleTask)
+	authed.HEAD("/tasks/:id/file", s.quotaMiddleware("download"), s.handleTaskFileHead)
+	authed.GET("/tasks/:id/file", s.rateLimit(coreAPIRateMax), s.quotaMiddleware("download"), s.handleTaskFile)
 }
 
 func (s *Server) handleSearch(c *gin.Context) {
@@ -46,7 +50,7 @@ func (s *Server) handleSearch(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, gin.H{"results": results})
+	c.JSON(http.StatusOK, gin.H{"results": results})
 }
 
 func (s *Server) handleRegions(c *gin.Context) {
@@ -58,7 +62,7 @@ func (s *Server) handleRegions(c *gin.Context) {
 	if regions == nil {
 		regions = []db.RegionInfo{}
 	}
-	writeJSON(c, http.StatusOK, gin.H{"regions": regions})
+	c.JSON(http.StatusOK, gin.H{"regions": regions})
 }
 
 func (s *Server) handleVersions(c *gin.Context) {
@@ -72,7 +76,7 @@ func (s *Server) handleVersions(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, page)
+	c.JSON(http.StatusOK, page)
 }
 
 func (s *Server) handleRequest(c *gin.Context) {
@@ -81,12 +85,12 @@ func (s *Server) handleRequest(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	t, err := s.Tasks.Request(in)
+	t, err := s.Tasks.Request(currentUserID(c), in)
 	if err != nil {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"task_id": t.ID,
 		"status":  t.Status,
 		"task":    t,
@@ -99,7 +103,7 @@ func (s *Server) handleQueue(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, gin.H{"queue": q, "workers": 1})
+	c.JSON(http.StatusOK, gin.H{"queue": q, "workers": 1})
 }
 
 func (s *Server) handleCache(c *gin.Context) {
@@ -122,7 +126,7 @@ func (s *Server) handleCache(c *gin.Context) {
 		if byBundle == nil {
 			byBundle = map[string][]db.Task{}
 		}
-		writeJSON(c, http.StatusOK, gin.H{"by_bundle": byBundle})
+		c.JSON(http.StatusOK, gin.H{"by_bundle": byBundle})
 		return
 	}
 	items, err := s.Tasks.Cache(20)
@@ -130,7 +134,7 @@ func (s *Server) handleCache(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, gin.H{"cache": items})
+	c.JSON(http.StatusOK, gin.H{"cache": items})
 }
 
 func (s *Server) handleTask(c *gin.Context) {
@@ -139,17 +143,45 @@ func (s *Server) handleTask(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, t)
+	c.JSON(http.StatusOK, gin.H{
+		"id":        t.ID,
+		"bundle_id": t.BundleID,
+		"status":    t.Status,
+		"error":     t.Error,
+		"logs":      t.Logs,
+	})
+}
+
+func (s *Server) taskFileReady(c *gin.Context) (db.Task, error) {
+	t, err := s.Tasks.Get(c.Param("id"))
+	if err != nil {
+		return t, err
+	}
+	if t.Status != "completed" || t.OutputPath == "" {
+		return t, errStatus(http.StatusConflict, "task not ready")
+	}
+	if _, err := os.Stat(t.OutputPath); err != nil {
+		return t, errStatus(http.StatusNotFound, "file not found")
+	}
+	return t, nil
+}
+
+func (s *Server) handleTaskFileHead(c *gin.Context) {
+	if _, err := s.taskFileReady(c); err != nil {
+		writeErr(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleTaskFile(c *gin.Context) {
-	t, err := s.Tasks.Get(c.Param("id"))
+	t, err := s.taskFileReady(c)
 	if err != nil {
 		writeErr(c, err)
 		return
 	}
-	if t.Status != "completed" || t.OutputPath == "" {
-		writeErr(c, errStatus(http.StatusConflict, "task not ready"))
+	if err := s.Auth.ConsumeUserQuota(currentUserID(c), "download"); err != nil {
+		writeErr(c, err)
 		return
 	}
 	c.FileAttachment(t.OutputPath, t.BundleID+".ipa")

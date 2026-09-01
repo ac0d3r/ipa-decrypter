@@ -35,6 +35,12 @@ const { t } = useI18n()
 const router = useRouter()
 const route = useRoute()
 
+function safeRedirect(value) {
+  if (typeof value !== 'string') return ''
+  if (!value.startsWith('/') || value.startsWith('//')) return ''
+  return value
+}
+
 const username = ref('')
 const password = ref('')
 const busy = ref(false)
@@ -45,13 +51,13 @@ async function submit() {
   error.value = ''
   try {
     const me = await authApi.login(username.value, password.value)
-    markAuthed({ admin: !!me.is_admin, name: me.username || '' })
+    markAuthed({ admin: !!me.is_admin, name: me.username || '', quota: me.quota || null })
+    const redirect = safeRedirect(route.query.redirect)
     if (me.is_admin) {
-      const redirect = typeof route.query.redirect === 'string' ? route.query.redirect : '/admin'
       await router.replace(redirect.startsWith('/admin') ? redirect : '/admin')
       return
     }
-    await router.replace('/')
+    await router.replace(redirect && redirect !== '/login' ? redirect : '/')
   } catch (e) {
     error.value = e.message || t('auth.failed')
   } finally {

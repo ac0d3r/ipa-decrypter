@@ -94,7 +94,7 @@ func Search(term, country string, limit int) ([]AppResult, error) {
 		return nil, fmt.Errorf("search term required")
 	}
 	if limit <= 0 {
-		limit = 8
+		limit = 15
 	}
 	u := fmt.Sprintf("https://itunes.apple.com/search?term=%s&entity=software&country=%s&limit=%d",
 		url.QueryEscape(term), url.QueryEscape(country), limit)

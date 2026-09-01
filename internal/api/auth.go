@@ -14,16 +14,22 @@ import (
 const (
 	sessionCookie = "session"
 	userKey       = "user"
+	userIDKey     = "user_id"
 )
 
 func setUser(c *gin.Context, u db.User) {
 	c.Set(userKey, u)
+	c.Set(userIDKey, u.ID)
 }
 
 func currentUser(c *gin.Context) db.User {
 	v, _ := c.Get(userKey)
 	u, _ := v.(db.User)
 	return u
+}
+
+func currentUserID(c *gin.Context) string {
+	return c.GetString(userIDKey)
 }
 
 func sessionToken(c *gin.Context) string {
@@ -67,6 +73,18 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 	}
 }
 
+func (s *Server) quotaMiddleware(qtype string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		u := currentUser(c)
+		if err := u.CheckQuota(qtype); err != nil {
+			writeErr(c, err)
+			c.Abort()
+			return
+		}
+		c.Next()
+	}
+}
+
 func (s *Server) registerAuthRoutes(r gin.IRouter) {
 	auth := r.Group("/api/v1/auth")
 	auth.POST("/login", s.handleLogin)
@@ -98,10 +116,12 @@ func (s *Server) handleLogin(c *gin.Context) {
 		return
 	}
 	setSessionCookie(c, result.Token, result.ExpiresAt)
+
 	c.JSON(http.StatusOK, gin.H{
 		"username":   result.Username,
 		"is_admin":   result.IsAdmin,
 		"expires_at": result.ExpiresAt,
+		"quota":      result.Quota,
 	})
 }
 
@@ -119,6 +139,9 @@ func (s *Server) handleMe(c *gin.Context) {
 	}
 	if u.SessionExpiresAt != nil {
 		payload["expires_at"] = *u.SessionExpiresAt
+	}
+	if !u.IsAdmin {
+		payload["quota"] = u.Quota()
 	}
 	c.JSON(http.StatusOK, payload)
 }

@@ -32,7 +32,7 @@ func (s *Server) handleAdminTasks(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, items)
+	c.JSON(http.StatusOK, items)
 }
 
 func (s *Server) handleListAccounts(c *gin.Context) {
@@ -41,7 +41,7 @@ func (s *Server) handleListAccounts(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, items)
+	c.JSON(http.StatusOK, items)
 }
 
 func (s *Server) handleCreateAccount(c *gin.Context) {
@@ -55,7 +55,7 @@ func (s *Server) handleCreateAccount(c *gin.Context) {
 		writeAccountErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusCreated, item)
+	c.JSON(http.StatusCreated, item)
 }
 
 func (s *Server) handleGetAccount(c *gin.Context) {
@@ -64,7 +64,7 @@ func (s *Server) handleGetAccount(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleLoginAccount(c *gin.Context) {
@@ -77,7 +77,7 @@ func (s *Server) handleLoginAccount(c *gin.Context) {
 		writeAccountErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleRefreshAccount(c *gin.Context) {
@@ -86,7 +86,7 @@ func (s *Server) handleRefreshAccount(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleRevokeAccount(c *gin.Context) {
@@ -95,7 +95,7 @@ func (s *Server) handleRevokeAccount(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleDeleteAccount(c *gin.Context) {
@@ -112,7 +112,7 @@ func (s *Server) handleListDevices(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, items)
+	c.JSON(http.StatusOK, items)
 }
 
 func (s *Server) handleCreateDevice(c *gin.Context) {
@@ -126,7 +126,7 @@ func (s *Server) handleCreateDevice(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusCreated, item)
+	c.JSON(http.StatusCreated, item)
 }
 
 func (s *Server) handleGetDevice(c *gin.Context) {
@@ -135,7 +135,7 @@ func (s *Server) handleGetDevice(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleUpdateDevice(c *gin.Context) {
@@ -149,7 +149,7 @@ func (s *Server) handleUpdateDevice(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleHealthDevice(c *gin.Context) {
@@ -158,7 +158,7 @@ func (s *Server) handleHealthDevice(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	writeJSON(c, http.StatusOK, item)
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleDeleteDevice(c *gin.Context) {

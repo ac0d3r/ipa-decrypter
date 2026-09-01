@@ -16,7 +16,8 @@ func init() {
 
 type Server struct {
 	*services.Registry
-	WebDir string
+	WebDir  string
+	limiter *rateLimiter
 }
 
 func (s *Server) Engine() *gin.Engine {

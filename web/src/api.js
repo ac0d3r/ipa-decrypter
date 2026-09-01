@@ -12,7 +12,7 @@ export class ApiError extends Error {
 
 let onUnauthorized = null
 
-/** Register a handler invoked when an authenticated admin request returns 401. */
+/** Register a handler invoked when an authenticated request returns 401. */
 export function setUnauthorizedHandler(fn) {
   onUnauthorized = fn
 }
@@ -72,6 +72,18 @@ export const publicApi = {
     return request(`/api/v1/cache?${q}`)
   },
   taskFileURL: (id) => `/api/v1/tasks/${id}/file`,
+  checkTaskFile: async (id) => {
+    const res = await fetch(`${BASE}/api/v1/tasks/${id}/file`, {
+      method: 'HEAD',
+      credentials: 'same-origin',
+    })
+    if (!res.ok) {
+      let data = null
+      try { data = await res.json() } catch { /* ignore */ }
+      if (res.status === 401 && onUnauthorized) onUnauthorized()
+      throw new ApiError(data?.error || res.statusText, { status: res.status, data })
+    }
+  },
 }
 
 // --- Auth ---

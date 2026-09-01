@@ -17,9 +17,9 @@ type Registry struct {
 func NewRegistry(cfg config.Config, database *db.DB) *Registry {
 	accounts := NewAccountService(cfg, database)
 	devices := NewDeviceService(database)
-	tasks := NewTaskService(cfg, database, accounts, devices)
-	versions := NewVersionService(accounts)
 	auth := NewAuthService(cfg, database)
+	tasks := NewTaskService(cfg, database, accounts, devices, auth)
+	versions := NewVersionService(accounts)
 	return &Registry{
 		Accounts: accounts,
 		Devices:  devices,

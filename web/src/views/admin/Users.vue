@@ -10,13 +10,15 @@
         <tr>
           <th>{{ t('users.colUsername') }}</th>
           <th>{{ t('users.colRole') }}</th>
+          <th>{{ t('users.colDecryptLimit') }}</th>
+          <th>{{ t('users.colDownloadLimit') }}</th>
           <th>{{ t('users.colCreated') }}</th>
           <th>{{ t('users.colActions') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="!items.length">
-          <td colspan="4" class="muted">{{ t('common.noData') }}</td>
+          <td colspan="6" class="muted">{{ t('common.noData') }}</td>
         </tr>
         <tr v-for="u in items" :key="u.id">
           <td>{{ u.username }}</td>
@@ -25,6 +27,8 @@
               {{ u.is_admin ? t('users.roleAdmin') : t('users.roleUser') }}
             </span>
           </td>
+          <td class="muted">{{ fmtUsage(u, 'decrypt') }}</td>
+          <td class="muted">{{ fmtUsage(u, 'download') }}</td>
           <td class="muted">{{ fmt(u.created_at) }}</td>
           <td>
             <div class="row-actions">
@@ -71,6 +75,10 @@
           <input type="checkbox" v-model="editForm.is_admin" />
           <span>{{ t('users.isAdmin') }}</span>
         </label>
+        <template v-if="!editForm.is_admin">
+          <input v-model.number="editForm.limit" type="number" min="-1" :placeholder="t('users.quotaLimit')" />
+          <p class="hint">{{ t('users.limitHint') }}</p>
+        </template>
       </div>
       <div class="modal-actions">
         <button @click="closeEdit" :disabled="busy">{{ t('common.cancel') }}</button>
@@ -96,7 +104,18 @@ const formError = ref('')
 const addOpen = ref(false)
 const editOpen = ref(false)
 const form = reactive({ username: '', password: '', is_admin: false })
-const editForm = reactive({ id: '', username: '', password: '', is_admin: false })
+const editForm = reactive({ id: '', username: '', password: '', is_admin: false, limit: 5 })
+
+function quotaOf(u, kind) {
+  return u.quota?.[kind] || null
+}
+
+function fmtUsage(u, kind) {
+  const q = quotaOf(u, kind)
+  if (!q) return '—'
+  if (q.limit < 0) return t('users.limitUnlimited')
+  return `${q.used ?? 0} / ${q.limit}`
+}
 
 function fmt(s) {
   try {
@@ -153,6 +172,8 @@ function openEdit(u) {
   editForm.username = u.username
   editForm.password = ''
   editForm.is_admin = !!u.is_admin
+  const q = quotaOf(u, 'decrypt')
+  editForm.limit = q && q.limit < 0 ? -1 : (q?.limit ?? 5)
   formError.value = ''
   editOpen.value = true
 }
@@ -167,6 +188,9 @@ async function saveEdit() {
   try {
     const body = { is_admin: editForm.is_admin }
     if (editForm.password.trim()) body.password = editForm.password.trim()
+    if (!editForm.is_admin && Number.isFinite(editForm.limit)) {
+      body.limit = editForm.limit
+    }
     await adminApi.updateUser(editForm.id, body)
     closeEdit()
     await load()
@@ -216,6 +240,12 @@ onMounted(load)
   grid-column: 1 / -1;
 }
 .checkbox-row input { width: auto; }
+.hint {
+  grid-column: 1 / -1;
+  margin: 0;
+  font-size: 0.72rem;
+  color: var(--text-3);
+}
 .modal { width: min(420px, 100%); margin: 0; }
 .modal h2 { margin: 0 0 0.35rem; font-size: 1rem; }
 .modal-actions { display: flex; justify-content: flex-end; gap: 0.5rem; }
