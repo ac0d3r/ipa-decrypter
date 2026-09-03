@@ -14,6 +14,7 @@
         <RouterLink to="/admin/devices">{{ t('nav.devices') }}</RouterLink>
         <RouterLink to="/admin/tasks">{{ t('nav.tasks') }}</RouterLink>
         <RouterLink to="/admin/users">{{ t('nav.users') }}</RouterLink>
+        <RouterLink to="/admin/vouchers">{{ t('nav.vouchers') }}</RouterLink>
       </nav>
       <button type="button" class="logout" :disabled="busy" @click="logout">
         {{ t('auth.logout') }}

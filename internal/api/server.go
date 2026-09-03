@@ -32,6 +32,7 @@ func (s *Server) Engine() *gin.Engine {
 	admin := r.Group("/api/v1/admin", s.requireAdmin())
 	s.registerAdminRoutes(admin)
 	s.registerUserRoutes(admin)
+	s.registerVoucherRoutes(admin)
 
 	r.NoRoute(s.handleNoRoute)
 

@@ -8,6 +8,7 @@ import Accounts from './views/Accounts.vue'
 import Devices from './views/Devices.vue'
 import Tasks from './views/admin/Tasks.vue'
 import Users from './views/admin/Users.vue'
+import Vouchers from './views/admin/Vouchers.vue'
 import { authApi, setUnauthorizedHandler } from './api'
 import { clearAuthState, isAuthChecked, isAuthed, isAdminUser, markAuthed } from './auth'
 import { initI18n } from './i18n'
@@ -31,6 +32,7 @@ const router = createRouter({
         { path: 'devices', component: Devices },
         { path: 'tasks', component: Tasks },
         { path: 'users', component: Users },
+        { path: 'vouchers', component: Vouchers },
       ],
     },
   ],

@@ -44,6 +44,7 @@ func (d *DB) migrate() error {
 		&Secret{},
 		&Task{},
 		&User{},
+		&Voucher{},
 	)
 }
 
@@ -105,12 +106,6 @@ func (d *DB) GetSecret(key string) (string, error) {
 	return s.Value, err
 }
 
-func (d *DB) CountUsers() (int64, error) {
-	var n int64
-	err := d.gorm.Model(&User{}).Count(&n).Error
-	return n, err
-}
-
 func (d *DB) CreateUser(u *User) error {
 	return d.gorm.Create(u).Error
 }
@@ -160,6 +155,15 @@ func (d *DB) GetUserBySessionToken(token string) (User, error) {
 func (d *DB) ListUsers() ([]User, error) {
 	var out []User
 	err := d.gorm.Order("created_at ASC").Find(&out).Error
+	return out, err
+}
+
+func (d *DB) GetUsersByIDs(ids []string) ([]User, error) {
+	if len(ids) == 0 {
+		return nil, nil
+	}
+	var out []User
+	err := d.gorm.Where("id IN ?", ids).Find(&out).Error
 	return out, err
 }
 

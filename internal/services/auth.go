@@ -20,6 +20,7 @@ import (
 const (
 	sessionTTL        = 7 * 24 * time.Hour
 	sessionTokenBytes = 32
+	maxUsernameLen    = 64
 )
 
 var (
@@ -164,19 +165,9 @@ func (s *AuthService) CreateUser(in UserCreateInput) (db.User, error) {
 }
 
 func (s *AuthService) createUser(username, password string, isAdmin bool) (db.User, error) {
-	username = strings.TrimSpace(username)
-	if username == "" || password == "" {
-		return db.User{}, fmt.Errorf("username and password required")
-	}
-	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	u, err := s.newUser(username, password, isAdmin)
 	if err != nil {
 		return db.User{}, err
-	}
-	u := db.User{
-		ID:           uuid.NewString(),
-		Username:     username,
-		PasswordHash: string(hash),
-		IsAdmin:      isAdmin,
 	}
 	if !isAdmin {
 		u.DecryptLimit = db.DefaultQuota
@@ -191,6 +182,26 @@ func (s *AuthService) createUser(username, password string, isAdmin bool) (db.Us
 	return u, nil
 }
 
+func (s *AuthService) newUser(username, password string, isAdmin bool) (db.User, error) {
+	username = strings.TrimSpace(username)
+	if username == "" || password == "" {
+		return db.User{}, fmt.Errorf("username and password required")
+	}
+	if len(username) > maxUsernameLen {
+		return db.User{}, fmt.Errorf("username too long")
+	}
+	pwHash, err := hashPassword(password)
+	if err != nil {
+		return db.User{}, err
+	}
+	return db.User{
+		ID:           uuid.NewString(),
+		Username:     username,
+		PasswordHash: pwHash,
+		IsAdmin:      isAdmin,
+	}, nil
+}
+
 func (s *AuthService) UpdateUser(id string, in UserUpdateInput) (db.User, error) {
 	u, err := s.getUser(id)
 	if err != nil {
@@ -201,15 +212,18 @@ func (s *AuthService) UpdateUser(id string, in UserUpdateInput) (db.User, error)
 		if pw == "" {
 			return db.User{}, fmt.Errorf("password required")
 		}
-		hash, err := bcrypt.GenerateFromPassword([]byte(pw), bcrypt.DefaultCost)
+		hash, err := hashPassword(pw)
 		if err != nil {
 			return db.User{}, err
 		}
-		u.PasswordHash = string(hash)
+		u.PasswordHash = hash
 		u.SessionToken = ""
 		u.SessionExpiresAt = nil
 	}
 	if in.Limit != nil {
+		if u.IsAdmin {
+			return db.User{}, fmt.Errorf("cannot set quota for admin")
+		}
 		if *in.Limit < -1 {
 			return db.User{}, fmt.Errorf("limit must be -1 or >= 0")
 		}
@@ -254,6 +268,14 @@ func randomToken() (string, error) {
 		return "", err
 	}
 	return hex.EncodeToString(b), nil
+}
+
+func hashPassword(password string) (string, error) {
+	hash, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return "", err
+	}
+	return string(hash), nil
 }
 
 func isUniqueViolation(err error) bool {

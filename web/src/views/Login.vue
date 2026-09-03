@@ -5,8 +5,8 @@
         <RouterLink to="/" class="back">{{ t('nav.back') }}</RouterLink>
         <LangSwitch />
       </div>
-      <h1>{{ t('auth.title') }}</h1>
-      <p class="muted">{{ t('auth.hint') }}</p>
+      <h1>{{ registering ? t('auth.registerTitle') : t('auth.title') }}</h1>
+      <p class="muted">{{ registering ? t('auth.registerHint') : t('auth.hint') }}</p>
       <label>
         <span>{{ t('auth.username') }}</span>
         <input v-model="username" autocomplete="username" required autofocus />
@@ -15,8 +15,15 @@
         <span>{{ t('auth.password') }}</span>
         <input v-model="password" type="password" autocomplete="current-password" required />
       </label>
+      <label v-if="registering">
+        <span>{{ t('auth.voucherCode') }}</span>
+        <input v-model="code" autocomplete="off" required />
+      </label>
       <button class="primary" type="submit" :disabled="busy">
-        {{ busy ? t('common.loading') : t('common.login') }}
+        {{ busy ? t('common.loading') : (registering ? t('auth.registerTitle') : t('common.login')) }}
+      </button>
+      <button type="button" class="linkish" :disabled="busy" @click="toggleMode">
+        {{ registering ? t('auth.goLogin') : t('auth.goRegister') }}
       </button>
       <p v-if="error" class="error">{{ error }}</p>
     </form>
@@ -43,23 +50,39 @@ function safeRedirect(value) {
 
 const username = ref('')
 const password = ref('')
+const code = ref('')
 const busy = ref(false)
 const error = ref('')
+const registering = ref(false)
+
+function toggleMode() {
+  registering.value = !registering.value
+  error.value = ''
+}
+
+async function afterAuth(me) {
+  markAuthed({ admin: !!me.is_admin, name: me.username || '', quota: me.quota || null })
+  const redirect = safeRedirect(route.query.redirect)
+  if (me.is_admin) {
+    await router.replace(redirect.startsWith('/admin') ? redirect : '/admin')
+    return
+  }
+  await router.replace(redirect && redirect !== '/login' ? redirect : '/')
+}
 
 async function submit() {
   busy.value = true
   error.value = ''
   try {
-    const me = await authApi.login(username.value, password.value)
-    markAuthed({ admin: !!me.is_admin, name: me.username || '', quota: me.quota || null })
-    const redirect = safeRedirect(route.query.redirect)
-    if (me.is_admin) {
-      await router.replace(redirect.startsWith('/admin') ? redirect : '/admin')
+    if (registering.value) {
+      const me = await authApi.register(username.value, password.value, code.value)
+      await afterAuth(me)
       return
     }
-    await router.replace(redirect && redirect !== '/login' ? redirect : '/')
+    const me = await authApi.login(username.value, password.value)
+    await afterAuth(me)
   } catch (e) {
-    error.value = e.message || t('auth.failed')
+    error.value = e.message || t(registering.value ? 'auth.registerFailed' : 'auth.failed')
   } finally {
     busy.value = false
   }
@@ -108,6 +131,16 @@ button.primary {
   width: 100%;
   padding: 0.55rem;
 }
+.linkish {
+  background: none;
+  border: 0;
+  color: var(--text-3);
+  font-size: 0.8rem;
+  padding: 0;
+  cursor: pointer;
+  text-align: left;
+}
+.linkish:hover { color: var(--text); }
 .error {
   margin: 0;
   color: var(--red);

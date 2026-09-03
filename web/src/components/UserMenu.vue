@@ -14,6 +14,12 @@
           <span>{{ fmtQuota(quota.download) }}</span>
         </div>
       </div>
+      <form v-if="!authState.isAdmin" class="redeem" @submit.prevent="redeem">
+        <input v-model="redeemCode" :placeholder="t('auth.redeemPlaceholder')" autocomplete="off" />
+        <button type="submit" :disabled="redeemBusy || !redeemCode.trim()">{{ t('auth.redeem') }}</button>
+        <p v-if="redeemError" class="redeem-msg error">{{ redeemError }}</p>
+        <p v-else-if="redeemOk" class="redeem-msg ok">{{ redeemOk }}</p>
+      </form>
       <button type="button" class="menu-logout" :disabled="logoutBusy" @click="logout">
         {{ t('auth.logout') }}
       </button>
@@ -33,6 +39,10 @@ const logoutBusy = ref(false)
 const root = ref(null)
 
 const quota = computed(() => authState.quota || {})
+const redeemCode = ref('')
+const redeemBusy = ref(false)
+const redeemError = ref('')
+const redeemOk = ref('')
 
 function fmtQuota(q) {
   if (!q) return '—'
@@ -61,6 +71,22 @@ async function toggle() {
 function onDocClick(e) {
   if (!open.value) return
   if (root.value && !root.value.contains(e.target)) open.value = false
+}
+
+async function redeem() {
+  redeemBusy.value = true
+  redeemError.value = ''
+  redeemOk.value = ''
+  try {
+    const me = await authApi.redeem(redeemCode.value)
+    authState.quota = me?.quota || null
+    redeemOk.value = t('auth.redeemOk', { quota: me?.added ?? '' })
+    redeemCode.value = ''
+  } catch (e) {
+    redeemError.value = e.message
+  } finally {
+    redeemBusy.value = false
+  }
 }
 
 async function logout() {
@@ -101,7 +127,7 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   position: absolute;
   right: 0;
   top: calc(100% + 6px);
-  min-width: 180px;
+  min-width: 200px;
   background: var(--surface);
   border: 1px solid var(--line);
   border-radius: 10px;
@@ -128,6 +154,28 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   color: var(--text);
   font-variant-numeric: tabular-nums;
 }
+.redeem {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.15rem 0.35rem 0.5rem;
+  border-bottom: 1px solid var(--line);
+  margin-bottom: 0.4rem;
+}
+.redeem input {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.4rem;
+}
+.redeem button {
+  font-size: 0.72rem;
+  padding: 0.28rem 0.4rem;
+}
+.redeem-msg {
+  margin: 0;
+  font-size: 0.68rem;
+}
+.redeem-msg.ok { color: var(--ok, #6ee7a8); }
+.redeem-msg.error { color: var(--red); }
 .menu-logout {
   width: 100%;
   font-size: 0.72rem;

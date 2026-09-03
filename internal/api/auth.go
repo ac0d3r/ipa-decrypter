@@ -88,8 +88,10 @@ func (s *Server) quotaMiddleware(qtype string) gin.HandlerFunc {
 func (s *Server) registerAuthRoutes(r gin.IRouter) {
 	auth := r.Group("/api/v1/auth")
 	auth.POST("/login", s.handleLogin)
+	auth.POST("/register", s.rateLimit(registerRateMax), s.handleRegister)
 	auth.POST("/logout", s.handleLogout)
 	auth.GET("/me", s.requireAuth(), s.handleMe)
+	auth.POST("/redeem", s.requireAuth(), s.handleRedeem)
 }
 
 func (s *Server) handleLogin(c *gin.Context) {
@@ -123,6 +125,54 @@ func (s *Server) handleLogin(c *gin.Context) {
 		"expires_at": result.ExpiresAt,
 		"quota":      result.Quota,
 	})
+}
+
+func (s *Server) handleRegister(c *gin.Context) {
+	var in services.RegisterInput
+	if err := c.ShouldBindJSON(&in); err != nil {
+		writeErr(c, errStatus(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+	in.Username = strings.TrimSpace(in.Username)
+	in.Code = strings.TrimSpace(in.Code)
+	if in.Username == "" || in.Password == "" || in.Code == "" {
+		writeErr(c, errStatus(http.StatusBadRequest, "username, password and code required"))
+		return
+	}
+	result, err := s.Auth.Register(in)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+	setSessionCookie(c, result.Token, result.ExpiresAt)
+	c.JSON(http.StatusCreated, gin.H{
+		"username":   result.Username,
+		"is_admin":   result.IsAdmin,
+		"expires_at": result.ExpiresAt,
+		"quota":      result.Quota,
+	})
+}
+
+func (s *Server) handleRedeem(c *gin.Context) {
+	var body struct {
+		Code string `json:"code"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		writeErr(c, errStatus(http.StatusBadRequest, "invalid request body"))
+		return
+	}
+	u, added, err := s.Auth.RedeemVoucher(currentUserID(c), body.Code)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+	payload := gin.H{
+		"username": u.Username,
+		"is_admin": u.IsAdmin,
+		"quota":    u.Quota(),
+		"added":    added,
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 func (s *Server) handleLogout(c *gin.Context) {

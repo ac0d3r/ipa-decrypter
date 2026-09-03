@@ -9,9 +9,10 @@ import (
 )
 
 const (
-	searchRateMax  = 15
-	versionRateMax = 10
-	coreAPIRateMax = 5
+	searchRateMax   = 15
+	versionRateMax  = 10
+	coreAPIRateMax  = 5
+	registerRateMax = 5
 )
 
 type rateLimiter struct {

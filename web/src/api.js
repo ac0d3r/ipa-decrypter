@@ -95,6 +95,15 @@ export const authApi = {
   }),
   logout: () => request('/api/v1/auth/logout', { method: 'POST', skipAuthRedirect: true }),
   me: () => request('/api/v1/auth/me', { skipAuthRedirect: true }),
+  register: (username, password, code) => request('/api/v1/auth/register', {
+    method: 'POST',
+    body: JSON.stringify({ username, password, code }),
+    skipAuthRedirect: true,
+  }),
+  redeem: (code) => request('/api/v1/auth/redeem', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  }),
 }
 
 // --- Admin (后台) ---
@@ -117,6 +126,18 @@ export const adminApi = {
   createUser: (body) => request('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(body) }),
   updateUser: (id, body) => request(`/api/v1/admin/users/${id}`, { method: 'PUT', body: JSON.stringify(body) }),
   deleteUser: (id) => request(`/api/v1/admin/users/${id}`, { method: 'DELETE' }),
+
+  listVouchers: ({ status, user, offset, limit } = {}) => {
+    const q = new URLSearchParams()
+    if (status) q.set('status', status)
+    if (user) q.set('user', user)
+    if (offset != null) q.set('offset', String(offset))
+    if (limit != null) q.set('limit', String(limit))
+    const qs = q.toString()
+    return request(`/api/v1/admin/vouchers${qs ? `?${qs}` : ''}`)
+  },
+  createVouchers: (body) => request('/api/v1/admin/vouchers', { method: 'POST', body: JSON.stringify(body) }),
+  deleteVoucher: (id) => request(`/api/v1/admin/vouchers/${id}`, { method: 'DELETE' }),
 }
 
 export function statusClass(status) {
