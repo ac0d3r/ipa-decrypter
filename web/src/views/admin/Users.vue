@@ -35,7 +35,13 @@
               <button type="button" class="action-btn" :disabled="busy" @click="openEdit(u)">
                 {{ t('users.edit') }}
               </button>
-              <button type="button" class="action-btn danger" :disabled="busy" @click="remove(u)">
+              <button
+                type="button"
+                class="action-btn danger"
+                :disabled="busy || !canDelete(u)"
+                :title="canDelete(u) ? '' : t('users.cannotDeleteSelf')"
+                @click="remove(u)"
+              >
                 {{ t('common.delete') }}
               </button>
             </div>
@@ -52,10 +58,6 @@
       <div class="grid two">
         <input v-model="form.username" :placeholder="t('users.username')" autocomplete="off" />
         <input v-model="form.password" type="password" :placeholder="t('users.password')" autocomplete="new-password" />
-        <label class="checkbox-row">
-          <input type="checkbox" v-model="form.is_admin" />
-          <span>{{ t('users.isAdmin') }}</span>
-        </label>
       </div>
       <div class="modal-actions">
         <button @click="closeAdd" :disabled="busy">{{ t('common.cancel') }}</button>
@@ -69,16 +71,16 @@
     <div class="panel modal">
       <h2>{{ t('users.editTitle') }}</h2>
       <p class="muted">{{ editForm.username }}</p>
-      <div class="grid two">
-        <input v-model="editForm.password" type="password" :placeholder="t('users.newPassword')" autocomplete="new-password" />
-        <label class="checkbox-row">
-          <input type="checkbox" v-model="editForm.is_admin" />
-          <span>{{ t('users.isAdmin') }}</span>
+      <div class="fields">
+        <label>
+          <span>{{ t('users.password') }}</span>
+          <input v-model="editForm.password" type="password" :placeholder="t('users.newPassword')" autocomplete="new-password" />
         </label>
-        <template v-if="!editForm.is_admin">
-          <input v-model.number="editForm.limit" type="number" min="-1" :placeholder="t('users.quotaLimit')" />
-          <p class="hint">{{ t('users.limitHint') }}</p>
-        </template>
+        <label v-if="!editForm.isAdmin">
+          <span>{{ t('users.quotaLimit') }}</span>
+          <input v-model.number="editForm.limit" type="number" min="-1" />
+          <span class="hint">{{ t('users.limitHint') }}</span>
+        </label>
       </div>
       <div class="modal-actions">
         <button @click="closeEdit" :disabled="busy">{{ t('common.cancel') }}</button>
@@ -92,6 +94,7 @@
 <script setup>
 import { onMounted, reactive, ref } from 'vue'
 import { adminApi } from '../../api'
+import { currentUsername } from '../../auth'
 import IconButton from '../../components/IconButton.vue'
 import PanelHeader from '../../components/PanelHeader.vue'
 import { useI18n } from '../../i18n'
@@ -103,8 +106,12 @@ const error = ref('')
 const formError = ref('')
 const addOpen = ref(false)
 const editOpen = ref(false)
-const form = reactive({ username: '', password: '', is_admin: false })
-const editForm = reactive({ id: '', username: '', password: '', is_admin: false, limit: 5 })
+const form = reactive({ username: '', password: '' })
+const editForm = reactive({ id: '', username: '', password: '', isAdmin: false, limit: 5 })
+
+function canDelete(u) {
+  return !u.is_admin && u.username !== currentUsername()
+}
 
 function quotaOf(u, kind) {
   return u.quota?.[kind] || null
@@ -140,7 +147,6 @@ async function load() {
 function openAdd() {
   form.username = ''
   form.password = ''
-  form.is_admin = false
   formError.value = ''
   addOpen.value = true
 }
@@ -156,7 +162,6 @@ async function create() {
     await adminApi.createUser({
       username: form.username.trim(),
       password: form.password,
-      is_admin: form.is_admin,
     })
     closeAdd()
     await load()
@@ -171,7 +176,7 @@ function openEdit(u) {
   editForm.id = u.id
   editForm.username = u.username
   editForm.password = ''
-  editForm.is_admin = !!u.is_admin
+  editForm.isAdmin = !!u.is_admin
   const q = quotaOf(u, 'decrypt')
   editForm.limit = q && q.limit < 0 ? -1 : (q?.limit ?? 5)
   formError.value = ''
@@ -186,9 +191,9 @@ async function saveEdit() {
   busy.value = true
   formError.value = ''
   try {
-    const body = { is_admin: editForm.is_admin }
+    const body = {}
     if (editForm.password.trim()) body.password = editForm.password.trim()
-    if (!editForm.is_admin && Number.isFinite(editForm.limit)) {
+    if (!editForm.isAdmin && Number.isFinite(editForm.limit)) {
       body.limit = editForm.limit
     }
     await adminApi.updateUser(editForm.id, body)
@@ -202,6 +207,7 @@ async function saveEdit() {
 }
 
 async function remove(u) {
+  if (!canDelete(u)) return
   if (!confirm(t('users.deleteConfirm', { username: u.username }))) return
   busy.value = true
   error.value = ''
@@ -225,23 +231,27 @@ onMounted(load)
   padding: 0.28rem 0.5rem;
 }
 .action-btn.danger { color: var(--red); border-color: #4a2020; }
+.action-btn:disabled { opacity: 0.45; cursor: not-allowed; }
 .grid.two {
   display: grid;
   grid-template-columns: 1fr 1fr;
   gap: 0.65rem;
   margin: 0.75rem 0;
 }
-.checkbox-row {
+.fields {
   display: flex;
-  align-items: center;
-  gap: 0.45rem;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0.75rem 0;
+}
+.fields label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
   font-size: 0.82rem;
   color: var(--text-2);
-  grid-column: 1 / -1;
 }
-.checkbox-row input { width: auto; }
 .hint {
-  grid-column: 1 / -1;
   margin: 0;
   font-size: 0.72rem;
   color: var(--text-3);

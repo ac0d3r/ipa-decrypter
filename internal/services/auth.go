@@ -38,9 +38,9 @@ func NewAuthService(cfg config.Config, database *db.DB) *AuthService {
 	return &AuthService{cfg: cfg, db: database}
 }
 
-// EnsureBootstrapAdmin creates the first admin from env if no users exist.
+// EnsureBootstrapAdmin creates the admin from env if none exists.
 func (s *AuthService) EnsureBootstrapAdmin() error {
-	n, err := s.db.CountUsers()
+	n, err := s.db.CountAdmins()
 	if err != nil {
 		return err
 	}
@@ -141,12 +141,10 @@ func (s *AuthService) ValidateAdmin(token string) (db.User, error) {
 type UserCreateInput struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	IsAdmin  bool   `json:"is_admin"`
 }
 
 type UserUpdateInput struct {
 	Password *string `json:"password"`
-	IsAdmin  *bool   `json:"is_admin"`
 	Limit    *int    `json:"limit"` // applies to both decrypt & download totals
 }
 
@@ -162,7 +160,7 @@ func (s *AuthService) ListUsers() ([]db.User, error) {
 }
 
 func (s *AuthService) CreateUser(in UserCreateInput) (db.User, error) {
-	return s.createUser(in.Username, in.Password, in.IsAdmin)
+	return s.createUser(in.Username, in.Password, false)
 }
 
 func (s *AuthService) createUser(username, password string, isAdmin bool) (db.User, error) {
@@ -211,18 +209,6 @@ func (s *AuthService) UpdateUser(id string, in UserUpdateInput) (db.User, error)
 		u.SessionToken = ""
 		u.SessionExpiresAt = nil
 	}
-	if in.IsAdmin != nil {
-		if u.IsAdmin && !*in.IsAdmin {
-			n, err := s.db.CountAdmins()
-			if err != nil {
-				return db.User{}, err
-			}
-			if n <= 1 {
-				return db.User{}, fmt.Errorf("cannot demote the last admin")
-			}
-		}
-		u.IsAdmin = *in.IsAdmin
-	}
 	if in.Limit != nil {
 		if *in.Limit < -1 {
 			return db.User{}, fmt.Errorf("limit must be -1 or >= 0")
@@ -243,15 +229,6 @@ func (s *AuthService) DeleteUser(id, actorID string) error {
 	}
 	if u.ID == actorID {
 		return fmt.Errorf("cannot delete yourself")
-	}
-	if u.IsAdmin {
-		n, err := s.db.CountAdmins()
-		if err != nil {
-			return err
-		}
-		if n <= 1 {
-			return fmt.Errorf("cannot delete the last admin")
-		}
 	}
 	return s.db.DeleteUser(id)
 }

@@ -38,7 +38,7 @@ func (s *Server) handleCreateUser(c *gin.Context) {
 	}
 	item, err := s.Auth.CreateUser(in)
 	if err != nil {
-		writeErr(c, err)
+		writeUserErr(c, err)
 		return
 	}
 	c.JSON(http.StatusCreated, userJSON(item))
