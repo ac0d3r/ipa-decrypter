@@ -72,18 +72,6 @@ export const publicApi = {
     return request(`/api/v1/cache?${q}`)
   },
   taskFileURL: (id) => `/api/v1/tasks/${id}/file`,
-  checkTaskFile: async (id) => {
-    const res = await fetch(`${BASE}/api/v1/tasks/${id}/file`, {
-      method: 'HEAD',
-      credentials: 'same-origin',
-    })
-    if (!res.ok) {
-      let data = null
-      try { data = await res.json() } catch { /* ignore */ }
-      if (res.status === 401 && onUnauthorized) onUnauthorized()
-      throw new ApiError(data?.error || res.statusText, { status: res.status, data })
-    }
-  },
 }
 
 // --- Auth ---

@@ -216,7 +216,7 @@
 <script setup>
 import { onMounted, onUnmounted, reactive, ref, computed } from 'vue'
 import { useRouter } from 'vue-router'
-import { authApi, publicApi, statusClass, ApiError } from '../api'
+import { authApi, publicApi, statusClass } from '../api'
 import { authState, clearAuthState, markAuthed } from '../auth'
 import LangSwitch from '../components/LangSwitch.vue'
 import IconButton from '../components/IconButton.vue'
@@ -244,7 +244,6 @@ const loading = ref(false)
 const busy = ref(false)
 const searched = ref(false)
 const notice = ref('')
-const downloadBusy = ref(false)
 
 function noticeFromError(e) {
   return e?.message || t('home.downloadFailed')
@@ -255,21 +254,8 @@ async function downloadTask(id) {
     await requireLogin()
     return
   }
-  if (downloadBusy.value) return
   notice.value = ''
-  downloadBusy.value = true
-  try {
-    await publicApi.checkTaskFile(id)
-    window.location.assign(publicApi.taskFileURL(id))
-  } catch (e) {
-    if (e instanceof ApiError && e.status === 401) {
-      await requireLogin()
-      return
-    }
-    notice.value = noticeFromError(e)
-  } finally {
-    downloadBusy.value = false
-  }
+  window.location.assign(publicApi.taskFileURL(id))
 }
 const activeJobs = reactive({})
 const cachedByBundle = reactive({})
