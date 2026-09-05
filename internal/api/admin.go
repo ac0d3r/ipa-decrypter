@@ -24,6 +24,7 @@ func (s *Server) registerAdminRoutes(admin *gin.RouterGroup) {
 	admin.DELETE("/devices/:id", s.handleDeleteDevice)
 
 	admin.GET("/tasks", s.handleAdminTasks)
+	admin.DELETE("/tasks/:id", s.handleDeleteTask)
 }
 
 func (s *Server) handleAdminTasks(c *gin.Context) {
@@ -33,6 +34,14 @@ func (s *Server) handleAdminTasks(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, items)
+}
+
+func (s *Server) handleDeleteTask(c *gin.Context) {
+	if err := s.Tasks.Delete(c.Param("id")); err != nil {
+		writeErr(c, err)
+		return
+	}
+	c.Status(http.StatusNoContent)
 }
 
 func (s *Server) handleListAccounts(c *gin.Context) {

@@ -12,6 +12,10 @@ func (d *DB) UpdateTask(t Task) error {
 	return d.gorm.Save(&t).Error
 }
 
+func (d *DB) DeleteTask(id string) error {
+	return d.gorm.Delete(&Task{}, "id = ?", id).Error
+}
+
 func (d *DB) GetTask(id string) (Task, error) {
 	var t Task
 	err := d.gorm.First(&t, "id = ?", id).Error
@@ -62,6 +66,27 @@ func (d *DB) ListCompletedTasksForBundles(region string, bundleIDs []string) ([]
 	q := d.gorm.Where("status = ? AND bundle_id IN ? AND output_path != ''", "completed", bundleIDs)
 	if region != "" {
 		q = q.Where("region = ?", strings.ToLower(region))
+	}
+	err := q.Order("updated_at DESC").Find(&out).Error
+	for i := range out {
+		normalizeTaskLogs(&out[i])
+	}
+	return out, err
+}
+
+func (d *DB) ListCompletedTasksForVersion(bundleID, region, externalVersionID, displayVersion string) ([]Task, error) {
+	if externalVersionID == "" && displayVersion == "" {
+		return nil, nil
+	}
+	var out []Task
+	q := d.gorm.Where(
+		"status = ? AND bundle_id = ? AND region = ? AND output_path != ''",
+		"completed", bundleID, strings.ToLower(region),
+	)
+	if externalVersionID != "" {
+		q = q.Where("external_version_id = ?", externalVersionID)
+	} else {
+		q = q.Where("display_version = ?", displayVersion)
 	}
 	err := q.Order("updated_at DESC").Find(&out).Error
 	for i := range out {

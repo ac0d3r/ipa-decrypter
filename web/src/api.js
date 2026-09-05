@@ -105,6 +105,7 @@ export const adminApi = {
   deleteDevice: (id) => request(`/api/v1/admin/devices/${id}`, { method: 'DELETE' }),
 
   listTasks: () => request('/api/v1/admin/tasks'),
+  deleteTask: (id) => request(`/api/v1/admin/tasks/${id}`, { method: 'DELETE' }),
 
   listUsers: () => request('/api/v1/admin/users'),
   createUser: (body) => request('/api/v1/admin/users', { method: 'POST', body: JSON.stringify(body) }),

@@ -30,6 +30,9 @@ func writeErr(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
 		code = http.StatusNotFound
 		msg = "not found"
+	case errors.Is(err, services.ErrTaskNotDeletable):
+		code = http.StatusConflict
+		msg = "only completed or failed tasks can be deleted"
 	case errors.Is(err, db.ErrVoucherInvalid):
 		msg = "invalid voucher"
 	case errors.Is(err, db.ErrVoucherUsed):

@@ -68,6 +68,59 @@ func waitIdle(t *testing.T, s *TaskService) {
 	t.Fatal("task pipeline still running")
 }
 
+func TestDeleteTaskRemovesFiles(t *testing.T) {
+	s, database := testTasks(t)
+	out := filepath.Join(s.cfg.DecryptedDir, "done.ipa")
+	enc := filepath.Join(s.cfg.IPAsDir, "enc.ipa")
+	if err := os.WriteFile(out, []byte("out"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(enc, []byte("enc"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	existing := db.Task{
+		ID: uuid.NewString(), BundleID: "com.app", AppName: "App", Region: "us",
+		Status: "completed", OutputPath: out, EncryptedPath: enc,
+		Logs: []string{}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateTask(existing); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Delete(existing.ID); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := database.GetTask(existing.ID); err == nil {
+		t.Fatal("expected task to be gone")
+	}
+	if _, err := os.Stat(out); !os.IsNotExist(err) {
+		t.Fatalf("output still exists: %v", err)
+	}
+	if _, err := os.Stat(enc); !os.IsNotExist(err) {
+		t.Fatalf("encrypted still exists: %v", err)
+	}
+}
+
+func TestDeleteActiveTaskRejected(t *testing.T) {
+	s, database := testTasks(t)
+	now := time.Now().UTC()
+	existing := db.Task{
+		ID: uuid.NewString(), BundleID: "com.app", AppName: "App", Region: "us",
+		Status: "queued", Logs: []string{}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateTask(existing); err != nil {
+		t.Fatal(err)
+	}
+
+	if err := s.Delete(existing.ID); err != ErrTaskNotDeletable {
+		t.Fatalf("err = %v, want ErrTaskNotDeletable", err)
+	}
+	if _, err := database.GetTask(existing.ID); err != nil {
+		t.Fatal(err)
+	}
+}
+
 func TestRequestValidatesInput(t *testing.T) {
 	s, _ := testTasks(t)
 	if _, err := s.Request(TaskRequestInput{Region: "us"}); err == nil {
@@ -98,6 +151,97 @@ func TestRequestReusesActiveTask(t *testing.T) {
 	}
 	if got.ID != existing.ID {
 		t.Fatalf("id = %s, want %s", got.ID, existing.ID)
+	}
+}
+
+func TestRequestReusesCompletedTask(t *testing.T) {
+	s, database := testTasks(t)
+	out := filepath.Join(s.cfg.DecryptedDir, "done.ipa")
+	if err := os.WriteFile(out, []byte("ipa"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	existing := db.Task{
+		ID: uuid.NewString(), BundleID: "com.app", AppName: "App", Region: "us",
+		ExternalVersionID: "v3", DisplayVersion: "1.2.3", Status: "completed",
+		OutputPath: out, Logs: []string{}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateTask(existing); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Request(TaskRequestInput{BundleID: "com.app", Region: "us", ExternalVersionID: "v3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID != existing.ID {
+		t.Fatalf("id = %s, want %s", got.ID, existing.ID)
+	}
+	if got.Status != "completed" {
+		t.Fatalf("status = %s, want completed", got.Status)
+	}
+
+	latest, err := s.Request(TaskRequestInput{BundleID: "com.app", Region: "us", DisplayVersion: "1.2.3"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if latest.ID != existing.ID {
+		t.Fatalf("latest id = %s, want %s", latest.ID, existing.ID)
+	}
+}
+
+func TestRequestDoesNotReuseCompletedWithoutVersion(t *testing.T) {
+	s, database := testTasks(t)
+	seedAccountDevice(t, database)
+	out := filepath.Join(s.cfg.DecryptedDir, "old.ipa")
+	if err := os.WriteFile(out, []byte("ipa"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	now := time.Now().UTC()
+	existing := db.Task{
+		ID: uuid.NewString(), BundleID: "com.app", AppName: "App", Region: "us",
+		Status: "completed", OutputPath: out, Logs: []string{},
+		CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateTask(existing); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Request(TaskRequestInput{BundleID: "com.app", Region: "us", AppName: "App"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID == existing.ID {
+		t.Fatal("reused completed task without version identity")
+	}
+	if got.Status != "queued" {
+		t.Fatalf("status = %s, want queued", got.Status)
+	}
+}
+
+func TestRequestCompletedMissingFileCreatesNew(t *testing.T) {
+	s, database := testTasks(t)
+	seedAccountDevice(t, database)
+	now := time.Now().UTC()
+	existing := db.Task{
+		ID: uuid.NewString(), BundleID: "com.app", AppName: "App", Region: "us",
+		ExternalVersionID: "v4", Status: "completed",
+		OutputPath: filepath.Join(s.cfg.DecryptedDir, "missing.ipa"),
+		Logs:       []string{}, CreatedAt: now, UpdatedAt: now,
+	}
+	if err := database.CreateTask(existing); err != nil {
+		t.Fatal(err)
+	}
+
+	got, err := s.Request(TaskRequestInput{BundleID: "com.app", Region: "us", ExternalVersionID: "v4", AppName: "App"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got.ID == existing.ID {
+		t.Fatal("reused completed task whose file is gone")
+	}
+	if got.Status != "queued" {
+		t.Fatalf("status = %s, want queued", got.Status)
 	}
 }
 

@@ -164,6 +164,8 @@ export const messages = {
       colRegion: '地区/版本',
       colStatus: '状态',
       colTime: '时间',
+      colActions: '操作',
+      deleteConfirm: '删除任务 {name}？已解密的 IPA 文件会一并删除。',
       status: {
         queued: '排队中',
         downloading: '下载中',
@@ -338,6 +340,8 @@ export const messages = {
       colRegion: 'Region / version',
       colStatus: 'Status',
       colTime: 'Time',
+      colActions: 'Actions',
+      deleteConfirm: 'Delete task {name}? The decrypted IPA file will also be removed.',
       status: {
         queued: 'Queued',
         downloading: 'Downloading',

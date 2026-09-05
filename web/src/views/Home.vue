@@ -255,7 +255,16 @@ async function downloadTask(id) {
     return
   }
   notice.value = ''
-  window.location.assign(publicApi.taskFileURL(id))
+  try {
+    const t = await publicApi.task(id)
+    if (t.status !== 'completed') {
+      notice.value = t('home.downloadFailed')
+      return
+    }
+    window.location.assign(publicApi.taskFileURL(id))
+  } catch (e) {
+    notice.value = noticeFromError(e)
+  }
 }
 const activeJobs = reactive({})
 const cachedByBundle = reactive({})
@@ -519,6 +528,10 @@ async function startDecrypt(app, ver) {
     }
     const d = await publicApi.request(body)
     const job = d.task || { id: d.task_id, status: d.status, bundle_id: app.bundle_id, logs: [] }
+    if (job.status === 'completed') {
+      await downloadTask(job.id)
+      return
+    }
     activeJobs[app.bundle_id] = job
     startPolling()
     await pollJob(job.id, app.bundle_id)

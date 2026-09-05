@@ -2,6 +2,7 @@ package services
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -19,7 +20,10 @@ import (
 	"github.com/google/uuid"
 )
 
-var taskLog = logger.WithComponent("task")
+var (
+	taskLog             = logger.WithComponent("task")
+	ErrTaskNotDeletable = errors.New("only completed or failed tasks can be deleted")
+)
 
 type TaskService struct {
 	cfg       config.Config
@@ -55,6 +59,38 @@ func (s *TaskService) List() ([]db.Task, error) {
 
 func (s *TaskService) Get(id string) (db.Task, error) {
 	return s.db.GetTask(id)
+}
+
+func (s *TaskService) Delete(id string) error {
+	s.requestMu.Lock()
+	defer s.requestMu.Unlock()
+
+	task, err := s.db.GetTask(id)
+	if err != nil {
+		return err
+	}
+	if task.Status != "completed" && task.Status != "failed" {
+		return ErrTaskNotDeletable
+	}
+	s.removeTaskFile(task.OutputPath)
+	s.removeTaskFile(task.EncryptedPath)
+	if err := s.db.DeleteTask(id); err != nil {
+		return err
+	}
+	taskLog.WithFields(map[string]any{
+		"task_id":   task.ID,
+		"bundle_id": task.BundleID,
+	}).Info("task deleted")
+	return nil
+}
+
+func (s *TaskService) removeTaskFile(path string) {
+	if path == "" {
+		return
+	}
+	if err := os.Remove(path); err != nil && !os.IsNotExist(err) {
+		taskLog.WithFields(map[string]any{"path": path, "error": err.Error()}).Warn("failed to remove task file")
+	}
 }
 
 func (s *TaskService) Queue() ([]db.Task, error) {
@@ -122,6 +158,7 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 	in.AppName = strings.TrimSpace(in.AppName)
 	in.Region = strings.ToLower(strings.TrimSpace(in.Region))
 	in.ExternalVersionID = strings.TrimSpace(in.ExternalVersionID)
+	in.DisplayVersion = strings.TrimSpace(in.DisplayVersion)
 	if in.BundleID == "" {
 		return db.Task{}, fmt.Errorf("bundle_id required")
 	}
@@ -150,6 +187,15 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 			s.kickRunIfIdle(t.ID)
 			return t, nil
 		}
+	}
+
+	if completed, ok := s.findReusableCompleted(in.BundleID, in.Region, extVer, in.DisplayVersion); ok {
+		taskLog.WithFields(map[string]any{
+			"task_id":   completed.ID,
+			"bundle_id": in.BundleID,
+			"region":    in.Region,
+		}).Info("reusing completed task")
+		return completed, nil
 	}
 
 	if failed, ok := s.findReusableFailed(in.BundleID, in.Region, extVer); ok {
@@ -408,6 +454,19 @@ func (s *TaskService) decrypt(task *db.Task) error {
 	return nil
 }
 
+func (s *TaskService) findReusableCompleted(bundleID, region, externalVersionID, displayVersion string) (db.Task, bool) {
+	tasks, err := s.db.ListCompletedTasksForVersion(bundleID, region, externalVersionID, displayVersion)
+	if err != nil {
+		return db.Task{}, false
+	}
+	for _, t := range tasks {
+		if outputReady(&t) {
+			return t, true
+		}
+	}
+	return db.Task{}, false
+}
+
 func (s *TaskService) findReusableFailed(bundleID, region, externalVersionID string) (db.Task, bool) {
 	tasks, err := s.db.ListFailedTasksForVersion(bundleID, region, externalVersionID)
 	if err != nil {
@@ -448,6 +507,14 @@ func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput) (db.Task
 		return db.Task{}, err
 	}
 	return failed, nil
+}
+
+func outputReady(task *db.Task) bool {
+	if task.OutputPath == "" {
+		return false
+	}
+	st, err := os.Stat(task.OutputPath)
+	return err == nil && st.Size() > 0
 }
 
 func encryptedReady(task *db.Task) bool {
