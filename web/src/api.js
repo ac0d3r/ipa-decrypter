@@ -100,10 +100,6 @@ export const authApi = {
     body: JSON.stringify({ username, password, code }),
     skipAuthRedirect: true,
   }),
-  redeem: (code) => request('/api/v1/auth/redeem', {
-    method: 'POST',
-    body: JSON.stringify({ code }),
-  }),
 }
 
 // --- Admin (后台) ---

@@ -73,25 +73,12 @@ func (s *Server) requireAdmin() gin.HandlerFunc {
 	}
 }
 
-func (s *Server) quotaMiddleware(qtype string) gin.HandlerFunc {
-	return func(c *gin.Context) {
-		u := currentUser(c)
-		if err := u.CheckQuota(qtype); err != nil {
-			writeErr(c, err)
-			c.Abort()
-			return
-		}
-		c.Next()
-	}
-}
-
 func (s *Server) registerAuthRoutes(r gin.IRouter) {
 	auth := r.Group("/api/v1/auth")
 	auth.POST("/login", s.handleLogin)
 	auth.POST("/register", s.rateLimit(registerRateMax), s.handleRegister)
 	auth.POST("/logout", s.handleLogout)
 	auth.GET("/me", s.requireAuth(), s.handleMe)
-	auth.POST("/redeem", s.requireAuth(), s.handleRedeem)
 }
 
 func (s *Server) handleLogin(c *gin.Context) {
@@ -123,7 +110,6 @@ func (s *Server) handleLogin(c *gin.Context) {
 		"username":   result.Username,
 		"is_admin":   result.IsAdmin,
 		"expires_at": result.ExpiresAt,
-		"quota":      result.Quota,
 	})
 }
 
@@ -149,30 +135,7 @@ func (s *Server) handleRegister(c *gin.Context) {
 		"username":   result.Username,
 		"is_admin":   result.IsAdmin,
 		"expires_at": result.ExpiresAt,
-		"quota":      result.Quota,
 	})
-}
-
-func (s *Server) handleRedeem(c *gin.Context) {
-	var body struct {
-		Code string `json:"code"`
-	}
-	if err := c.ShouldBindJSON(&body); err != nil {
-		writeErr(c, errStatus(http.StatusBadRequest, "invalid request body"))
-		return
-	}
-	u, added, err := s.Auth.RedeemVoucher(currentUserID(c), body.Code)
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	payload := gin.H{
-		"username": u.Username,
-		"is_admin": u.IsAdmin,
-		"quota":    u.Quota(),
-		"added":    added,
-	}
-	c.JSON(http.StatusOK, payload)
 }
 
 func (s *Server) handleLogout(c *gin.Context) {
@@ -189,9 +152,6 @@ func (s *Server) handleMe(c *gin.Context) {
 	}
 	if u.SessionExpiresAt != nil {
 		payload["expires_at"] = *u.SessionExpiresAt
-	}
-	if !u.IsAdmin {
-		payload["quota"] = u.Quota()
 	}
 	c.JSON(http.StatusOK, payload)
 }

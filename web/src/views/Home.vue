@@ -246,23 +246,8 @@ const searched = ref(false)
 const notice = ref('')
 const downloadBusy = ref(false)
 
-function noticeFromError(e, kind = 'download') {
-  if (e instanceof ApiError && (e.status === 429 || /quota/i.test(e.message || ''))) {
-    return t(kind === 'decrypt' ? 'home.quotaExceededDecrypt' : 'home.quotaExceededDownload')
-  }
-  if (kind === 'decrypt' && e instanceof ApiError && e.status === 409) {
-    return t('home.decryptBusy')
-  }
+function noticeFromError(e) {
   return e?.message || t('home.downloadFailed')
-}
-
-async function refreshQuota() {
-  try {
-    const me = await authApi.me()
-    if (me) authState.quota = me.quota || null
-  } catch {
-    /* ignore */
-  }
 }
 
 async function downloadTask(id) {
@@ -276,15 +261,12 @@ async function downloadTask(id) {
   try {
     await publicApi.checkTaskFile(id)
     window.location.assign(publicApi.taskFileURL(id))
-    await new Promise((r) => setTimeout(r, 1200))
-    await refreshQuota()
   } catch (e) {
     if (e instanceof ApiError && e.status === 401) {
       await requireLogin()
       return
     }
-    notice.value = noticeFromError(e, 'download')
-    if (e instanceof ApiError && e.status === 429) await refreshQuota()
+    notice.value = noticeFromError(e)
   } finally {
     downloadBusy.value = false
   }
@@ -555,8 +537,7 @@ async function startDecrypt(app, ver) {
     startPolling()
     await pollJob(job.id, app.bundle_id)
   } catch (e) {
-    notice.value = noticeFromError(e, 'decrypt')
-    if (e instanceof ApiError && e.status === 429) await refreshQuota()
+    notice.value = noticeFromError(e)
   } finally {
     busy.value = false
   }
@@ -569,7 +550,6 @@ async function pollJob(id, bundleId) {
     if (!isDone(j)) return
     await loadCache()
     if (results.value.length) await loadCachedForResults(results.value)
-    if (j.status === 'completed') await refreshQuota()
   } catch {}
 }
 
@@ -601,7 +581,7 @@ onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
 async function refreshAuth() {
   try {
     const me = await authApi.me()
-    markAuthed({ admin: !!me?.is_admin, name: me?.username || '', quota: me?.quota || null })
+    markAuthed({ admin: !!me?.is_admin, name: me?.username || '' })
   } catch {
     clearAuthState()
   }

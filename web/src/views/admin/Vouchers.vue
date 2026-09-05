@@ -34,7 +34,6 @@
       <thead>
         <tr>
           <th>{{ t('vouchers.colCode') }}</th>
-          <th>{{ t('vouchers.colQuota') }}</th>
           <th>{{ t('vouchers.colStatus') }}</th>
           <th>{{ t('vouchers.colRedeemedBy') }}</th>
           <th>{{ t('vouchers.colCreated') }}</th>
@@ -43,11 +42,10 @@
       </thead>
       <tbody>
         <tr v-if="!items.length">
-          <td colspan="6" class="muted">{{ t('common.noData') }}</td>
+          <td colspan="5" class="muted">{{ t('common.noData') }}</td>
         </tr>
         <tr v-for="v in items" :key="v.id">
           <td class="mono">{{ v.code }}</td>
-          <td>{{ v.quota }}</td>
           <td>
             <span class="badge" :class="v.redeemed ? '' : 'ok'">
               {{ v.redeemed ? t('vouchers.used') : t('vouchers.unused') }}
@@ -89,10 +87,6 @@
           <span>{{ t('vouchers.count') }}</span>
           <input v-model.number="form.count" type="number" min="1" max="50" />
         </label>
-        <label>
-          <span>{{ t('vouchers.quota') }}</span>
-          <input v-model.number="form.quota" type="number" min="1" />
-        </label>
       </div>
       <div class="modal-actions">
         <button @click="closeAdd" :disabled="busy">{{ t('common.cancel') }}</button>
@@ -133,7 +127,7 @@ const addOpen = ref(false)
 const codesOpen = ref(false)
 const createdCodes = ref([])
 const copied = ref(false)
-const form = reactive({ count: 5, quota: 5 })
+const form = reactive({ count: 5 })
 const filter = ref('unused')
 const userID = ref('')
 const redeemers = ref([])
@@ -210,7 +204,6 @@ function goPage(next) {
 
 function openAdd() {
   form.count = 5
-  form.quota = 5
   formError.value = ''
   addOpen.value = true
 }
@@ -240,7 +233,6 @@ async function create() {
   try {
     const out = await adminApi.createVouchers({
       count: form.count,
-      quota: form.quota,
     })
     createdCodes.value = out?.codes || []
     closeAdd()

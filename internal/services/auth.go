@@ -65,7 +65,6 @@ type LoginResult struct {
 	Username  string
 	IsAdmin   bool
 	ExpiresAt time.Time
-	Quota     map[string]map[string]int
 }
 
 func (s *AuthService) Login(username, password string) (LoginResult, error) {
@@ -86,16 +85,12 @@ func (s *AuthService) Login(username, password string) (LoginResult, error) {
 	if err := s.db.UpdateUser(u); err != nil {
 		return LoginResult{}, err
 	}
-	out := LoginResult{
+	return LoginResult{
 		Token:     token,
 		Username:  u.Username,
 		IsAdmin:   u.IsAdmin,
 		ExpiresAt: expires,
-	}
-	if !u.IsAdmin {
-		out.Quota = u.Quota()
-	}
-	return out, nil
+	}, nil
 }
 
 func (s *AuthService) Logout(token string) error {
@@ -146,7 +141,6 @@ type UserCreateInput struct {
 
 type UserUpdateInput struct {
 	Password *string `json:"password"`
-	Limit    *int    `json:"limit"` // applies to both decrypt & download totals
 }
 
 func (s *AuthService) ListUsers() ([]db.User, error) {
@@ -168,10 +162,6 @@ func (s *AuthService) createUser(username, password string, isAdmin bool) (db.Us
 	u, err := s.newUser(username, password, isAdmin)
 	if err != nil {
 		return db.User{}, err
-	}
-	if !isAdmin {
-		u.DecryptLimit = db.DefaultQuota
-		u.DownloadLimit = db.DefaultQuota
 	}
 	if err := s.db.CreateUser(&u); err != nil {
 		if isUniqueViolation(err) {
@@ -220,16 +210,6 @@ func (s *AuthService) UpdateUser(id string, in UserUpdateInput) (db.User, error)
 		u.SessionToken = ""
 		u.SessionExpiresAt = nil
 	}
-	if in.Limit != nil {
-		if u.IsAdmin {
-			return db.User{}, fmt.Errorf("cannot set quota for admin")
-		}
-		if *in.Limit < -1 {
-			return db.User{}, fmt.Errorf("limit must be -1 or >= 0")
-		}
-		u.DecryptLimit = *in.Limit
-		u.DownloadLimit = *in.Limit
-	}
 	if err := s.db.UpdateUser(u); err != nil {
 		return db.User{}, err
 	}
@@ -256,10 +236,6 @@ func (s *AuthService) getUser(id string) (db.User, error) {
 		return db.User{}, err
 	}
 	return u, nil
-}
-
-func (s *AuthService) ConsumeUserQuota(userID, qtype string) error {
-	return s.db.ConsumeUserQuota(userID, qtype)
 }
 
 func randomToken() (string, error) {

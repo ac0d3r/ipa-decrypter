@@ -57,8 +57,6 @@ type Task struct {
 	OutputPath        string    `json:"output_path,omitempty"`    // decrypted IPA
 	EncryptedPath     string    `json:"encrypted_path,omitempty"` // downloaded encrypted IPA
 	Logs              []string  `gorm:"serializer:json" json:"logs"`
-	OwnerUserID       string    `json:"-"` // user who started this decrypt (quota)
-	DecryptCharged    bool      `json:"-"`
 	CreatedAt         time.Time `json:"created_at"`
 	UpdatedAt         time.Time `json:"updated_at"`
 }
@@ -76,10 +74,6 @@ type User struct {
 	Username         string     `gorm:"uniqueIndex;size:64" json:"username"`
 	PasswordHash     string     `json:"-"`
 	IsAdmin          bool       `json:"is_admin"`
-	DecryptLimit     int        `gorm:"column:daily_decrypt_limit" json:"decrypt_limit"`   // total lifetime; -1 unlimited; 0 → default
-	DownloadLimit    int        `gorm:"column:daily_download_limit" json:"download_limit"` // total lifetime; -1 unlimited; 0 → default
-	Decrypts         int        `json:"decrypts"`
-	Downloads        int        `json:"downloads"`
 	SessionToken     string     `gorm:"index;size:64" json:"-"`
 	SessionExpiresAt *time.Time `json:"-"`
 	CreatedAt        time.Time  `json:"created_at"`
@@ -88,11 +82,10 @@ type User struct {
 
 func (User) TableName() string { return "users" }
 
-// Voucher is a one-time quota code.
+// Voucher is a one-time invite code for registration.
 type Voucher struct {
 	ID         string     `gorm:"primaryKey" json:"id"`
 	Code       string     `gorm:"uniqueIndex;size:16" json:"code"`
-	Quota      int        `json:"quota"`
 	UserID     string     `json:"user_id,omitempty"`
 	RedeemedAt *time.Time `json:"redeemed_at,omitempty"`
 	CreatedAt  time.Time  `json:"created_at"`

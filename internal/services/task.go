@@ -2,7 +2,6 @@ package services
 
 import (
 	"context"
-	"errors"
 	"fmt"
 	"math/rand/v2"
 	"net/http"
@@ -20,29 +19,23 @@ import (
 	"github.com/google/uuid"
 )
 
-var (
-	taskLog        = logger.WithComponent("task")
-	ErrDecryptBusy = errors.New("decrypt already in progress")
-)
+var taskLog = logger.WithComponent("task")
 
 type TaskService struct {
-	cfg      config.Config
-	db       *db.DB
-	accounts *AccountService
-	devices  *DeviceService
-	auth     *AuthService
-	tracker  *decryptTracker
-	running  sync.Map // taskID present while run() is in flight
+	cfg       config.Config
+	db        *db.DB
+	accounts  *AccountService
+	devices   *DeviceService
+	requestMu sync.Mutex
+	running   sync.Map // taskID present while run() is in flight
 }
 
-func NewTaskService(cfg config.Config, database *db.DB, accounts *AccountService, devices *DeviceService, auth *AuthService) *TaskService {
+func NewTaskService(cfg config.Config, database *db.DB, accounts *AccountService, devices *DeviceService) *TaskService {
 	return &TaskService{
 		cfg:      cfg,
 		db:       database,
 		accounts: accounts,
 		devices:  devices,
-		auth:     auth,
-		tracker:  newDecryptTracker(),
 	}
 }
 
@@ -120,15 +113,11 @@ func (s *TaskService) Regions() ([]db.RegionInfo, error) {
 	return out, nil
 }
 
-func sameRequest(t db.Task, in TaskRequestInput) bool {
-	return t.BundleID == in.BundleID && t.Region == in.Region && t.ExternalVersionID == in.ExternalVersionID
+func sameVersion(t db.Task, bundleID, region, extVer string) bool {
+	return t.BundleID == bundleID && strings.EqualFold(t.Region, region) && t.ExternalVersionID == extVer
 }
 
-func (s *TaskService) Request(userID string, in TaskRequestInput) (db.Task, error) {
-	if userID == "" {
-		return db.Task{}, fmt.Errorf("user required")
-	}
-
+func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 	in.BundleID = strings.TrimSpace(in.BundleID)
 	in.AppName = strings.TrimSpace(in.AppName)
 	in.Region = strings.ToLower(strings.TrimSpace(in.Region))
@@ -143,27 +132,16 @@ func (s *TaskService) Request(userID string, in TaskRequestInput) (db.Task, erro
 		in.AppName = in.BundleID
 	}
 
-	s.tracker.lock()
-	defer s.tracker.unlock()
+	s.requestMu.Lock()
+	defer s.requestMu.Unlock()
 
-	if id := s.tracker.boundTask(userID); id != "" {
-		t, err := s.db.GetTask(id)
-		if err != nil {
-			s.tracker.drop(id)
-		} else if t.Status == "completed" || t.Status == "failed" {
-			s.tracker.drop(id)
-		} else if sameRequest(t, in) {
-			s.kickRunIfIdle(t.ID)
-			return t, nil
-		} else {
-			return db.Task{}, ErrDecryptBusy
-		}
+	tasks, err := s.db.ListActiveTasks()
+	if err != nil {
+		return db.Task{}, err
 	}
-
-	tasks, _ := s.db.ListActiveTasks()
 	extVer := in.ExternalVersionID
 	for _, t := range tasks {
-		if t.BundleID == in.BundleID && t.Region == in.Region && t.ExternalVersionID == extVer {
+		if sameVersion(t, in.BundleID, in.Region, extVer) {
 			taskLog.WithFields(map[string]any{
 				"task_id":   t.ID,
 				"bundle_id": in.BundleID,
@@ -178,7 +156,7 @@ func (s *TaskService) Request(userID string, in TaskRequestInput) (db.Task, erro
 		if _, running := s.running.Load(failed.ID); running {
 			return failed, nil
 		}
-		task, err := s.prepareRetry(failed, in, userID)
+		task, err := s.prepareRetry(failed, in)
 		if err != nil {
 			return db.Task{}, err
 		}
@@ -188,7 +166,6 @@ func (s *TaskService) Request(userID string, in TaskRequestInput) (db.Task, erro
 			"region":    task.Region,
 			"path":      task.EncryptedPath,
 		}).Info("retrying failed task with existing encrypted ipa")
-		s.bindDecrypt(userID, &task)
 		go s.run(task.ID)
 		return task, nil
 	}
@@ -216,7 +193,6 @@ func (s *TaskService) Request(userID string, in TaskRequestInput) (db.Task, erro
 		AccountID:         acc.ID,
 		DeviceID:          dev.ID,
 		Logs:              []string{"Task queued"},
-		OwnerUserID:       userID,
 		CreatedAt:         now,
 		UpdatedAt:         now,
 	}
@@ -231,7 +207,6 @@ func (s *TaskService) Request(userID string, in TaskRequestInput) (db.Task, erro
 		"device_id":  task.DeviceID,
 		"version":    task.ExternalVersionID,
 	}).Info("task created")
-	s.bindDecrypt(userID, &task)
 	go s.run(task.ID)
 	return task, nil
 }
@@ -240,25 +215,6 @@ func (s *TaskService) kickRunIfIdle(id string) {
 	if _, running := s.running.Load(id); !running {
 		go s.run(id)
 	}
-}
-
-func (s *TaskService) bindDecrypt(userID string, task *db.Task) {
-	s.tracker.bind(userID, task.ID)
-}
-
-func (s *TaskService) chargeDecrypt(task *db.Task) {
-	if task.OwnerUserID == "" || task.DecryptCharged {
-		return
-	}
-	if err := s.auth.ConsumeUserQuota(task.OwnerUserID, "decrypt"); err != nil {
-		taskLog.WithFields(map[string]any{
-			"task_id": task.ID,
-			"user_id": task.OwnerUserID,
-			"error":   err.Error(),
-		}).Warn("failed to consume decrypt quota")
-		return
-	}
-	task.DecryptCharged = true
 }
 
 func (s *TaskService) pickAccount(region string) (db.Account, error) {
@@ -304,8 +260,10 @@ func (s *TaskService) run(id string) {
 	defer func() {
 		if rec := recover(); rec != nil {
 			taskLog.WithFields(map[string]any{"task_id": id, "panic": rec}).Error("task pipeline panicked")
+			if t, err := s.db.GetTask(id); err == nil && t.Status != "completed" && t.Status != "failed" {
+				s.fail(&t, fmt.Sprintf("pipeline panicked: %v", rec))
+			}
 		}
-		s.tracker.finish(id)
 	}()
 
 	task, err := s.db.GetTask(id)
@@ -342,7 +300,6 @@ func (s *TaskService) run(id string) {
 		return
 	}
 
-	s.chargeDecrypt(&task)
 	task.Status = "completed"
 	task.Error = ""
 	task.UpdatedAt = time.Now().UTC()
@@ -464,7 +421,7 @@ func (s *TaskService) findReusableFailed(bundleID, region, externalVersionID str
 	return db.Task{}, false
 }
 
-func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput, userID string) (db.Task, error) {
+func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput) (db.Task, error) {
 	acc, err := s.pickAccount(in.Region)
 	if err != nil {
 		return db.Task{}, err
@@ -484,8 +441,6 @@ func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput, userID s
 	failed.AccountID = acc.ID
 	failed.DeviceID = dev.ID
 	failed.OutputPath = ""
-	failed.OwnerUserID = userID
-	failed.DecryptCharged = false
 	failed.UpdatedAt = now
 	s.log(&failed, "Retry queued (encrypted IPA on disk)")
 

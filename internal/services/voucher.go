@@ -16,25 +16,21 @@ const (
 	voucherAlphabet = "23456789ABCDEFGHJKLMNPQRSTUVWXYZ"
 	voucherRawLen   = 8
 	voucherMaxBatch = 50
-	voucherMaxQuota = 100000
 	voucherPageSize = 20
 	voucherMaxPage  = 100
 )
 
 type VoucherCreateInput struct {
 	Count int `json:"count"`
-	Quota int `json:"quota"`
 }
 
 type VoucherCreated struct {
 	Codes []string `json:"codes"`
-	Quota int      `json:"quota"`
 }
 
 type VoucherView struct {
 	ID               string     `json:"id"`
 	Code             string     `json:"code"`
-	Quota            int        `json:"quota"`
 	Redeemed         bool       `json:"redeemed"`
 	UserID           string     `json:"user_id,omitempty"`
 	RedeemedUsername string     `json:"redeemed_username,omitempty"`
@@ -46,12 +42,9 @@ func (s *AuthService) CreateVouchers(in VoucherCreateInput) (VoucherCreated, err
 	if in.Count < 1 || in.Count > voucherMaxBatch {
 		return VoucherCreated{}, fmt.Errorf("count must be 1–%d", voucherMaxBatch)
 	}
-	if in.Quota < 1 || in.Quota > voucherMaxQuota {
-		return VoucherCreated{}, fmt.Errorf("quota must be 1–%d", voucherMaxQuota)
-	}
 	const maxAttempts = 8
 	for attempt := 0; attempt < maxAttempts; attempt++ {
-		items, codes, err := generateVoucherBatch(in.Count, in.Quota)
+		items, codes, err := generateVoucherBatch(in.Count)
 		if err != nil {
 			return VoucherCreated{}, err
 		}
@@ -61,7 +54,7 @@ func (s *AuthService) CreateVouchers(in VoucherCreateInput) (VoucherCreated, err
 			}
 			return VoucherCreated{}, err
 		}
-		return VoucherCreated{Codes: codes, Quota: in.Quota}, nil
+		return VoucherCreated{Codes: codes}, nil
 	}
 	return VoucherCreated{}, fmt.Errorf("failed to allocate unique voucher codes")
 }
@@ -167,7 +160,6 @@ func (s *AuthService) toVoucherViews(items []db.Voucher) ([]VoucherView, error) 
 		row := VoucherView{
 			ID:        v.ID,
 			Code:      v.Code,
-			Quota:     v.Quota,
 			Redeemed:  v.Used(),
 			CreatedAt: v.CreatedAt,
 		}
@@ -209,20 +201,7 @@ func (s *AuthService) Register(in RegisterInput) (LoginResult, error) {
 	return s.Login(u.Username, in.Password)
 }
 
-func (s *AuthService) RedeemVoucher(userID, code string) (db.User, int, error) {
-	parsed, err := parseVoucherCode(code)
-	if err != nil {
-		return db.User{}, 0, err
-	}
-	added, err := s.db.RedeemVoucherForUser(parsed, userID)
-	if err != nil {
-		return db.User{}, 0, err
-	}
-	u, err := s.getUser(userID)
-	return u, added, err
-}
-
-func generateVoucherBatch(count, quota int) ([]db.Voucher, []string, error) {
+func generateVoucherBatch(count int) ([]db.Voucher, []string, error) {
 	items := make([]db.Voucher, 0, count)
 	codes := make([]string, 0, count)
 	seen := make(map[string]struct{}, count)
@@ -236,9 +215,8 @@ func generateVoucherBatch(count, quota int) ([]db.Voucher, []string, error) {
 		}
 		seen[code] = struct{}{}
 		items = append(items, db.Voucher{
-			ID:    uuid.NewString(),
-			Code:  code,
-			Quota: quota,
+			ID:   uuid.NewString(),
+			Code: code,
 		})
 		codes = append(codes, code)
 	}

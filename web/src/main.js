@@ -42,7 +42,7 @@ async function ensureAuth() {
   if (isAuthChecked()) return isAuthed()
   try {
     const me = await authApi.me()
-    markAuthed({ admin: !!me?.is_admin, name: me?.username || '', quota: me?.quota || null })
+    markAuthed({ admin: !!me?.is_admin, name: me?.username || '' })
   } catch {
     clearAuthState()
   }

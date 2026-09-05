@@ -21,10 +21,9 @@ func (s *Server) registerPublicRoutes(r gin.IRouter) {
 
 	authed := v1.Group("", s.requireAuth())
 	authed.GET("/versions", s.rateLimit(versionRateMax), s.handleVersions)
-	authed.POST("/request", s.rateLimit(coreAPIRateMax), s.quotaMiddleware("decrypt"), s.handleRequest)
+	authed.POST("/request", s.rateLimit(coreAPIRateMax), s.handleRequest)
 	authed.GET("/tasks/:id", s.handleTask)
-	authed.HEAD("/tasks/:id/file", s.quotaMiddleware("download"), s.handleTaskFileHead)
-	authed.GET("/tasks/:id/file", s.rateLimit(coreAPIRateMax), s.quotaMiddleware("download"), s.handleTaskFile)
+	authed.GET("/tasks/:id/file", s.rateLimit(coreAPIRateMax), s.handleTaskFile)
 }
 
 func (s *Server) handleSearch(c *gin.Context) {
@@ -85,7 +84,7 @@ func (s *Server) handleRequest(c *gin.Context) {
 		writeErr(c, err)
 		return
 	}
-	t, err := s.Tasks.Request(currentUserID(c), in)
+	t, err := s.Tasks.Request(in)
 	if err != nil {
 		writeErr(c, err)
 		return
@@ -152,37 +151,20 @@ func (s *Server) handleTask(c *gin.Context) {
 	})
 }
 
-func (s *Server) taskFileReady(c *gin.Context) (db.Task, error) {
+func (s *Server) handleTaskFile(c *gin.Context) {
 	t, err := s.Tasks.Get(c.Param("id"))
 	if err != nil {
-		return t, err
+		writeErr(c, err)
+		return
 	}
 	if t.Status != "completed" || t.OutputPath == "" {
-		return t, errStatus(http.StatusConflict, "task not ready")
+		writeErr(c, errStatus(http.StatusConflict, "task not ready"))
+		return
 	}
 	if _, err := os.Stat(t.OutputPath); err != nil {
-		return t, errStatus(http.StatusNotFound, "file not found")
+		writeErr(c, errStatus(http.StatusNotFound, "file not found"))
+		return
 	}
-	return t, nil
-}
 
-func (s *Server) handleTaskFileHead(c *gin.Context) {
-	if _, err := s.taskFileReady(c); err != nil {
-		writeErr(c, err)
-		return
-	}
-	c.Status(http.StatusNoContent)
-}
-
-func (s *Server) handleTaskFile(c *gin.Context) {
-	t, err := s.taskFileReady(c)
-	if err != nil {
-		writeErr(c, err)
-		return
-	}
-	if err := s.Auth.ConsumeUserQuota(currentUserID(c), "download"); err != nil {
-		writeErr(c, err)
-		return
-	}
 	c.FileAttachment(t.OutputPath, t.BundleID+".ipa")
 }

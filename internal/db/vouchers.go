@@ -92,42 +92,11 @@ func (d *DB) RedeemVoucherForNewUser(code string, u *User) error {
 			return err
 		}
 		u.IsAdmin = false
-		u.DecryptLimit = v.Quota
-		u.DownloadLimit = v.Quota
 		if err := tx.Create(u).Error; err != nil {
 			return err
 		}
 		return markVoucherRedeemed(tx, v, u.ID)
 	})
-}
-
-func (d *DB) RedeemVoucherForUser(code, userID string) (int, error) {
-	added := 0
-	err := d.gorm.Transaction(func(tx *gorm.DB) error {
-		var u User
-		if err := tx.First(&u, "id = ?", userID).Error; err != nil {
-			return err
-		}
-		if err := u.canAddQuota(); err != nil {
-			return err
-		}
-		v, err := takeUnusedVoucher(tx, code)
-		if err != nil {
-			return err
-		}
-		if err := u.AddQuota(v.Quota); err != nil {
-			return err
-		}
-		if err := tx.Save(&u).Error; err != nil {
-			return err
-		}
-		if err := markVoucherRedeemed(tx, v, u.ID); err != nil {
-			return err
-		}
-		added = v.Quota
-		return nil
-	})
-	return added, err
 }
 
 func takeUnusedVoucher(tx *gorm.DB, code string) (*Voucher, error) {
@@ -141,9 +110,6 @@ func takeUnusedVoucher(tx *gorm.DB, code string) (*Voucher, error) {
 	}
 	if v.Used() {
 		return nil, ErrVoucherUsed
-	}
-	if v.Quota < 1 {
-		return nil, ErrVoucherInvalid
 	}
 	return &v, nil
 }

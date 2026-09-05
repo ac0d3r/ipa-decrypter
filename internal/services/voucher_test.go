@@ -22,13 +22,13 @@ func testAuth(t *testing.T) *AuthService {
 	}, database)
 }
 
-func TestVoucherRegisterAndRedeem(t *testing.T) {
+func TestVoucherRegister(t *testing.T) {
 	s := testAuth(t)
 	if err := s.EnsureBootstrapAdmin(); err != nil {
 		t.Fatal(err)
 	}
 
-	created, err := s.CreateVouchers(VoucherCreateInput{Count: 2, Quota: 8})
+	created, err := s.CreateVouchers(VoucherCreateInput{Count: 2})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -43,74 +43,20 @@ func TestVoucherRegisterAndRedeem(t *testing.T) {
 	if reg.IsAdmin {
 		t.Fatal("registered user should not be admin")
 	}
-	if reg.Quota["decrypt"]["limit"] != 8 {
-		t.Fatalf("decrypt limit = %v, want 8", reg.Quota["decrypt"]["limit"])
+	if reg.Username != "alice" {
+		t.Fatalf("username = %q, want alice", reg.Username)
 	}
 
 	if _, err := s.Register(RegisterInput{Username: "bob", Password: "pw", Code: created.Codes[0]}); !errors.Is(err, db.ErrVoucherUsed) {
 		t.Fatalf("reuse code: %v, want %v", err, db.ErrVoucherUsed)
 	}
 
-	alice, err := s.db.GetUserByUsername("alice")
+	unused, err := s.ListVouchers(VoucherListQuery{Status: "unused"})
 	if err != nil {
 		t.Fatal(err)
 	}
-	u, added, err := s.RedeemVoucher(alice.ID, created.Codes[1])
-	if err != nil {
-		t.Fatal(err)
-	}
-	if added != 8 {
-		t.Fatalf("added = %d, want 8", added)
-	}
-	if u.DecryptLimit != 16 || u.DownloadLimit != 16 {
-		t.Fatalf("after redeem limits = %d/%d, want 16/16", u.DecryptLimit, u.DownloadLimit)
-	}
-
-	if _, _, err := s.RedeemVoucher(alice.ID, created.Codes[1]); !errors.Is(err, db.ErrVoucherUsed) {
-		t.Fatalf("second redeem: %v, want %v", err, db.ErrVoucherUsed)
-	}
-
-	admin, err := s.db.GetUserByUsername("admin")
-	if err != nil {
-		t.Fatal(err)
-	}
-	more, err := s.CreateVouchers(VoucherCreateInput{Count: 1, Quota: 3})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if _, _, err := s.RedeemVoucher(admin.ID, more.Codes[0]); err == nil {
-		t.Fatal("admin should not redeem quota vouchers")
-	}
-	list, err := s.ListVouchers(VoucherListQuery{})
-	if err != nil {
-		t.Fatal(err)
-	}
-	unused := 0
-	for _, v := range list.Items {
-		if !v.Redeemed {
-			unused++
-		}
-	}
-	if unused != 1 {
-		t.Fatalf("unused vouchers = %d, want 1 (admin redeem must not consume)", unused)
-	}
-
-	alice2, err := s.UpdateUser(alice.ID, UserUpdateInput{Limit: intPtr(-1)})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if alice2.DecryptLimit != -1 {
-		t.Fatalf("limit = %d, want -1", alice2.DecryptLimit)
-	}
-	if _, _, err := s.RedeemVoucher(alice.ID, more.Codes[0]); err == nil {
-		t.Fatal("unlimited user should not redeem quota vouchers")
-	}
-	unused2, err := s.ListVouchers(VoucherListQuery{Status: "unused"})
-	if err != nil {
-		t.Fatal(err)
-	}
-	if unused2.Total != 1 {
-		t.Fatalf("unused after unlimited redeem = %d, want 1", unused2.Total)
+	if unused.Total != 1 {
+		t.Fatalf("unused = %d, want 1", unused.Total)
 	}
 
 	usedList, err := s.ListVouchers(VoucherListQuery{Status: "used"})
@@ -120,19 +66,17 @@ func TestVoucherRegisterAndRedeem(t *testing.T) {
 	if err := s.DeleteVoucher(usedList.Items[0].ID); !errors.Is(err, db.ErrVoucherUsed) {
 		t.Fatalf("delete used: %v, want %v", err, db.ErrVoucherUsed)
 	}
-	if err := s.DeleteVoucher(unused2.Items[0].ID); err != nil {
+	if err := s.DeleteVoucher(unused.Items[0].ID); err != nil {
 		t.Fatal(err)
 	}
 }
-
-func intPtr(n int) *int { return &n }
 
 func TestVoucherListFilterAndPage(t *testing.T) {
 	s := testAuth(t)
 	if err := s.EnsureBootstrapAdmin(); err != nil {
 		t.Fatal(err)
 	}
-	created, err := s.CreateVouchers(VoucherCreateInput{Count: 3, Quota: 4})
+	created, err := s.CreateVouchers(VoucherCreateInput{Count: 3})
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -203,7 +147,7 @@ func TestRegisterDuplicateUsernameDoesNotConsumeVoucher(t *testing.T) {
 	if err := s.EnsureBootstrapAdmin(); err != nil {
 		t.Fatal(err)
 	}
-	created, err := s.CreateVouchers(VoucherCreateInput{Count: 2, Quota: 4})
+	created, err := s.CreateVouchers(VoucherCreateInput{Count: 2})
 	if err != nil {
 		t.Fatal(err)
 	}

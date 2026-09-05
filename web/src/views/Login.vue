@@ -61,7 +61,7 @@ function toggleMode() {
 }
 
 async function afterAuth(me) {
-  markAuthed({ admin: !!me.is_admin, name: me.username || '', quota: me.quota || null })
+  markAuthed({ admin: !!me.is_admin, name: me.username || '' })
   const redirect = safeRedirect(route.query.redirect)
   if (me.is_admin) {
     await router.replace(redirect.startsWith('/admin') ? redirect : '/admin')

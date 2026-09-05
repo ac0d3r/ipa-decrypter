@@ -114,23 +114,6 @@ func (d *DB) UpdateUser(u User) error {
 	return d.gorm.Save(&u).Error
 }
 
-func (d *DB) ConsumeUserQuota(userID, qtype string) error {
-	return d.gorm.Transaction(func(tx *gorm.DB) error {
-		var u User
-		if err := tx.First(&u, "id = ?", userID).Error; err != nil {
-			return err
-		}
-		if err := u.ConsumeQuota(qtype); err != nil {
-			return err
-		}
-		field, val := "decrypts", u.Decrypts
-		if qtype == "download" {
-			field, val = "downloads", u.Downloads
-		}
-		return tx.Model(&User{}).Where("id = ?", u.ID).Update(field, val).Error
-	})
-}
-
 func (d *DB) GetUser(id string) (User, error) {
 	var u User
 	err := d.gorm.First(&u, "id = ?", id).Error

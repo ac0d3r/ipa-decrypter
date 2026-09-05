@@ -5,7 +5,6 @@ export const authState = reactive({
   authed: false,
   isAdmin: false,
   username: '',
-  quota: null,
 })
 
 export function isAuthChecked() {
@@ -29,15 +28,13 @@ export function clearAuthState() {
   authState.authed = false
   authState.isAdmin = false
   authState.username = ''
-  authState.quota = null
 }
 
-export function markAuthed({ admin = false, name = '', quota = null } = {}) {
+export function markAuthed({ admin = false, name = '' } = {}) {
   authState.checked = true
   authState.authed = true
   authState.isAdmin = !!admin
   authState.username = name || ''
-  authState.quota = quota
 }
 
 export function resetAuthCheck() {
@@ -45,5 +42,4 @@ export function resetAuthCheck() {
   authState.authed = false
   authState.isAdmin = false
   authState.username = ''
-  authState.quota = null
 }

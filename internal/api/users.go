@@ -67,15 +67,10 @@ func (s *Server) handleDeleteUser(c *gin.Context) {
 
 func userJSON(u db.User) gin.H {
 	return gin.H{
-		"id":             u.ID,
-		"username":       u.Username,
-		"is_admin":       u.IsAdmin,
-		"decrypt_limit":  u.DecryptLimit,
-		"download_limit": u.DownloadLimit,
-		"decrypts":       u.Decrypts,
-		"downloads":      u.Downloads,
-		"created_at":     u.CreatedAt,
-		"updated_at":     u.UpdatedAt,
-		"quota":          u.Quota(),
+		"id":         u.ID,
+		"username":   u.Username,
+		"is_admin":   u.IsAdmin,
+		"created_at": u.CreatedAt,
+		"updated_at": u.UpdatedAt,
 	}
 }

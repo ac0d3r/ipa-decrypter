@@ -30,16 +30,10 @@ func writeErr(c *gin.Context, err error) {
 	case errors.Is(err, services.ErrNotFound), errors.Is(err, gorm.ErrRecordNotFound):
 		code = http.StatusNotFound
 		msg = "not found"
-	case errors.Is(err, db.ErrQuotaExceeded):
-		code = http.StatusTooManyRequests
-		msg = "quota exceeded"
 	case errors.Is(err, db.ErrVoucherInvalid):
 		msg = "invalid voucher"
 	case errors.Is(err, db.ErrVoucherUsed):
 		msg = "voucher already used"
-	case errors.Is(err, services.ErrDecryptBusy):
-		code = http.StatusConflict
-		msg = "decrypt already in progress"
 	default:
 		if ae, ok := err.(apiError); ok {
 			code = ae.status
