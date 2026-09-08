@@ -37,3 +37,4 @@ data/
 bin/
 debs/
 *.tar
+*.deb
