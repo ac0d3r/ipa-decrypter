@@ -1,5 +1,7 @@
 # Add --keyring-backend flag to avoid macOS Keychain
 #
+# Compatible with ipatool v2.7.0.
+#
 # Changes:
 #   - cmd/keyring_backend.go  (new)  backend selection: auto / file / keychain
 #   - cmd/common.go                  wire keyringBackends() into keychain init
@@ -13,9 +15,10 @@
 #   ipatool auth login --keyring-backend file --keychain-passphrase "your-passphrase"
 
 diff --git a/cmd/common.go b/cmd/common.go
+index b419e7a..87322e5 100644
 --- a/cmd/common.go
 +++ b/cmd/common.go
-@@ -24,6 +24,7 @@ import (
+@@ -23,6 +23,7 @@ import (
  
  var dependencies = Dependencies{}
  var keychainPassphrase string
@@ -23,23 +26,19 @@ diff --git a/cmd/common.go b/cmd/common.go
  
  type Dependencies struct {
  	Logger    log.Logger
-@@ -62,13 +63,9 @@ func newCookieJar(machine machine.Machine) http.CookieJar {
+@@ -61,11 +62,7 @@ func newCookieJar(stateDirectory string) http.CookieJar {
  // newKeychain returns a new keychain instance.
- func newKeychain(machine machine.Machine, logger log.Logger, interactive bool) keychain.Keychain {
- 	ring := util.Must(keyring.Open(keyring.Config{
+ func newKeychain(stateDirectory string, interactive bool) keychain.Keychain {
+ 	ring := util.Must(openKeyring(keyring.Config{
 -		AllowedBackends: []keyring.BackendType{
 -			keyring.KeychainBackend,
 -			keyring.SecretServiceBackend,
 -			keyring.FileBackend,
 -		},
--		ServiceName: KeychainServiceName,
--		FileDir:     filepath.Join(machine.HomeDirectory(), ConfigDirectoryName),
-+		AllowedBackends: keyringBackends(keyringBackend),
-+		ServiceName:     KeychainServiceName,
-+		FileDir:         filepath.Join(machine.HomeDirectory(), ConfigDirectoryName),
- 		FilePasswordFunc: func(s string) (string, error) {
- 			if keychainPassphrase == "" && !interactive {
- 				return "", errors.New("keychain passphrase is required when not running in interactive mode; use the \"--keychain-passphrase\" flag")
++		AllowedBackends:          keyringBackends(keyringBackend),
+ 		ServiceName:              KeychainServiceName,
+ 		KeychainTrustApplication: true,
+ 		FileDir:                  stateDirectory,
 diff --git a/cmd/keyring_backend.go b/cmd/keyring_backend.go
 new file mode 100644
 index 0000000..4127fb7
@@ -76,6 +75,7 @@ index 0000000..4127fb7
 +	}
 +}
 diff --git a/cmd/root.go b/cmd/root.go
+index b2aa044..3c16c8b 100644
 --- a/cmd/root.go
 +++ b/cmd/root.go
 @@ -43,7 +43,16 @@ func rootCmd() *cobra.Command {

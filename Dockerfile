@@ -11,7 +11,7 @@ FROM golang:1.25-alpine AS ipatool
 # CGO required: byteness/keyring → onepassword-sdk-go fails to compile with CGO_ENABLED=0 on linux.
 RUN apk add --no-cache git patch gcc musl-dev
 WORKDIR /src/ipatool
-ARG IPATOOL_VERSION=main
+ARG IPATOOL_VERSION=v2.7.0
 RUN git clone --depth 1 --branch "${IPATOOL_VERSION}" https://github.com/majd/ipatool.git .
 COPY integrations/ipatool/keyring-backend-flag.patch /tmp/keyring-backend-flag.patch
 RUN git apply --check /tmp/keyring-backend-flag.patch \
