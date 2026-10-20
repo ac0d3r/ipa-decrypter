@@ -447,8 +447,18 @@ func (s *TaskService) decrypt(task *db.Task) error {
 
 	code := resp.Exit.Code
 	if code != 0 {
-		taskLog.WithFields(map[string]any{"task_id": task.ID, "exit_code": code}).Error("unfaird decrypt failed")
+		// Surface unfaird's stderr (fall back to stdout) so the failure reason
+		// reaches the logs, task error, and UI instead of a bare exit code.
+		detail := stderrDetail(resp.Exit.Stderr, resp.Exit.Stdout)
+		taskLog.WithFields(map[string]any{
+			"task_id":   task.ID,
+			"exit_code": code,
+			"stderr":    detail,
+		}).Error("unfaird decrypt failed")
 		_ = s.db.UpdateTask(*task)
+		if detail != "" {
+			return fmt.Errorf("unfaird exit code %d: %s", code, detail)
+		}
 		return fmt.Errorf("unfaird exit code %d", code)
 	}
 
@@ -566,6 +576,19 @@ func findIPA(dir, taskID string) string {
 		}
 	}
 	return ""
+}
+
+// stderrDetail picks the informative output from an unfaird failure, keeping
+// the tail (where the actual error usually is) capped at 1KB.
+func stderrDetail(stderr, stdout string) string {
+	detail := strings.TrimSpace(stderr)
+	if detail == "" {
+		detail = strings.TrimSpace(stdout)
+	}
+	if len(detail) > 1024 {
+		detail = "…" + detail[len(detail)-1024:]
+	}
+	return detail
 }
 
 func (s *TaskService) log(task *db.Task, line string) {
