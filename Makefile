@@ -1,10 +1,9 @@
-.PHONY: help deps build build-web build-all build-unfaird dev-web clean clean-unfaird test fmt vet
+.PHONY: help deps build build-web build-all build-unfaird install-unfaird dev-web clean ci
 
 BIN         ?= bin/ipa-decrypter
 GO          ?= go
 NPM         ?= npm
-LDFLAGS     ?= -s -w
-UNFAIRD_DIR ?= unfaird
+UNFAIRD_DIR ?= third-party/unfaird
 
 help:
 	@echo "ipa-decrypter"
@@ -13,13 +12,11 @@ help:
 	@echo "  make build          Build backend binary to $(BIN)"
 	@echo "  make build-web      Build frontend to web/dist"
 	@echo "  make build-all      Build backend + frontend"
-	@echo "  make build-unfaird  Build unfaird iOS debs and copy them to integrations/unfaird"
+	@echo "  make build-unfaird  Build unfaird iOS debs into third-party/unfaird/debs"
+	@echo "  make install-unfaird SSH-install debs to a jailbroken device (root@ip:port)"
 	@echo "  make dev-web        Start Vite dev server (proxies /api -> :8080)"
-	@echo "  make test           go test ./..."
-	@echo "  make fmt            gofmt -w Go sources"
-	@echo "  make vet            go vet ./..."
-	@echo "  make clean          Remove $(BIN), web/dist, and unfaird build artifacts"
-	@echo "  make clean-unfaird  Remove unfaird debs and Theos/Swift build dirs"
+	@echo "  make ci             gofmt + go vet + go test ./..."
+	@echo "  make clean          Remove bin/, web/dist, and unfaird build artifacts"
 
 deps:
 	$(GO) mod download
@@ -27,7 +24,7 @@ deps:
 
 build:
 	@mkdir -p $(dir $(BIN))
-	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/server
+	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '-s -w' -o $(BIN) ./cmd/server
 
 build-web:
 	cd web && $(NPM) run build
@@ -41,34 +38,36 @@ build-unfaird:
 		git submodule update --init "$(UNFAIRD_DIR)"; \
 	fi
 	$(MAKE) -C "$(UNFAIRD_DIR)" package-all $(if $(SCHEMES),SCHEMES="$(SCHEMES)")
-	@mkdir -p integrations/unfaird
-	@found=0; \
-	for f in $(UNFAIRD_DIR)/debs/*.deb; do \
-		[ -f "$$f" ] || continue; \
-		cp -f "$$f" integrations/unfaird/; \
-		found=1; \
-	done; \
-	if [ "$$found" -eq 0 ]; then echo "no debs in $(UNFAIRD_DIR)/debs" >&2; exit 1; fi; \
-	ls -lh integrations/unfaird/*.deb
+	@ls -lh $(UNFAIRD_DIR)/debs/*.deb
+
+# Install built debs onto a jailbroken device over SSH.
+# Usage: `make install-unfaird DEVICE=root@192.168.1.2:2222` (port optional,
+# defaults to 22). Without DEVICE you are prompted for root@ip:port.
+install-unfaird:
+	@debs="$(UNFAIRD_DIR)/debs/*.deb"; \
+	if ! ls $$debs >/dev/null 2>&1; then \
+		echo "no debs in $(UNFAIRD_DIR)/debs - run make build-unfaird first" >&2; exit 1; \
+	fi; \
+	if [ -n "$(DEVICE)" ]; then device="$(DEVICE)"; \
+	else printf "Install to (root@ip:port): "; read device; fi; \
+	if [ -z "$$device" ]; then echo "no device given" >&2; exit 1; fi; \
+	host=$${device%:*}; port=$${device##*:}; \
+	if [ "$$host" = "$$device" ]; then port=22; fi; \
+	echo "Installing $$(ls $$debs | wc -l | tr -d ' ') deb(s) to $$host (port $$port)"; \
+	scp -P $$port $$debs $$host:/tmp/ \
+	&& ssh -p $$port $$host 'dpkg -i /tmp/*.deb'
 
 dev-web:
 	cd web && $(NPM) run dev
 
-test:
+ci:
+	@gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
+	$(GO) vet ./...
 	$(GO) test ./...
 
-fmt:
-	@gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
-
-vet:
-	$(GO) vet ./...
-
-clean: clean-unfaird
-	rm -rf $(BIN) web/dist
-
-clean-unfaird:
+clean:
 	@if [ -f "$(UNFAIRD_DIR)/Makefile" ]; then \
 		$(MAKE) -C "$(UNFAIRD_DIR)" clean-package; \
 	fi
 	rm -rf $(UNFAIRD_DIR)/.build $(UNFAIRD_DIR)/.build-ios
-	rm -f integrations/unfaird/*.deb
+	rm -rf $(dir $(BIN)) web/dist

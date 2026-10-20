@@ -11,9 +11,16 @@ FROM golang:1.25-alpine AS ipatool
 # CGO required: byteness/keyring → onepassword-sdk-go fails to compile with CGO_ENABLED=0 on linux.
 RUN apk add --no-cache git patch gcc musl-dev
 WORKDIR /src/ipatool
-ARG IPATOOL_VERSION=v2.7.0
-RUN git clone --depth 1 --branch "${IPATOOL_VERSION}" https://github.com/majd/ipatool.git .
-COPY integrations/ipatool/keyring-backend-flag.patch /tmp/keyring-backend-flag.patch
+ARG IPATOOL_VERSION=latest
+# "latest" resolves to the newest git tag at build time; pass `--build-arg IPATOOL_VERSION=<tag>` to pin.
+RUN if [ "$IPATOOL_VERSION" = "latest" ]; then \
+        IPATOOL_VERSION="$(git ls-remote --tags --sort=-v:refname https://github.com/majd/ipatool.git \
+            | grep -v '\^{}' | head -n1 | awk -F/ '{print $NF}')"; \
+    fi; \
+    echo "Building ipatool ${IPATOOL_VERSION}" >&2; \
+    [ -n "$IPATOOL_VERSION" ] || { echo "failed to resolve ipatool version" >&2; exit 1; }; \
+    git clone --depth 1 --branch "${IPATOOL_VERSION}" https://github.com/majd/ipatool.git .
+COPY third-party/ipatool/keyring-backend-flag.patch /tmp/keyring-backend-flag.patch
 RUN git apply --check /tmp/keyring-backend-flag.patch \
     && git apply /tmp/keyring-backend-flag.patch
 RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /ipatool .

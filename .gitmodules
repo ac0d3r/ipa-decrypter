@@ -1,4 +1,4 @@
 [submodule "unfaird"]
-	path = unfaird
+	path = third-party/unfaird
 	url = https://github.com/ac0d3r/unfaird
 	ignore = dirty
