@@ -56,25 +56,48 @@
     <div v-if="cache.length" class="feat-block">
       <div class="feat-title">{{ t('home.recent') }}</div>
       <div class="app-list">
-        <article v-for="c in cache" :key="c.id" class="app-card done">
+        <article v-for="g in recentGroups" :key="g.bundleId" class="app-card done">
           <div class="app-row">
-            <img v-if="c.icon_url" :src="c.icon_url" class="app-icon" alt="" />
+            <img v-if="g.items[0].icon_url" :src="g.items[0].icon_url" class="app-icon" alt="" />
             <div v-else class="app-icon placeholder"></div>
             <div class="app-info">
-              <div class="app-name">{{ c.app_name }}</div>
+              <div class="app-name">{{ g.items[0].app_name }}</div>
               <div class="app-meta">
-                <span v-if="c.display_version">v{{ c.display_version }}</span>
-                <span v-if="c.size_bytes"> · {{ fmtSize(c.size_bytes) }}</span>
-                <span v-if="c.region" class="meta-region"> · <CountryFlag :code="c.region" /></span>
+                <span v-if="g.items[0].display_version">v{{ g.items[0].display_version }}</span>
+                <span v-if="g.items[0].size_bytes"> · {{ fmtSize(g.items[0].size_bytes) }}</span>
+                <span v-if="g.items[0].region" class="meta-region"> · <CountryFlag :code="g.items[0].region" /></span>
               </div>
-              <div class="app-bundle">{{ c.bundle_id }}</div>
+              <div class="app-bundle">{{ g.bundleId }}</div>
             </div>
             <div class="app-action">
+              <button
+                v-if="g.items.length > 1"
+                type="button"
+                class="btn-outline"
+                :class="{ open: expandedRecent[g.bundleId] }"
+                @click="expandedRecent[g.bundleId] = !expandedRecent[g.bundleId]"
+              >
+                {{ t('home.versions') }} <span class="chev">{{ expandedRecent[g.bundleId] ? '▴' : '▾' }}</span>
+              </button>
               <a
                 class="btn btn-dl"
                 href="#"
-                @click.prevent="downloadTask(c.id)"
+                @click.prevent="downloadTask(g.items[0].id)"
               >{{ t('home.download') }}</a>
+            </div>
+          </div>
+          <div v-if="expandedRecent[g.bundleId]" class="versions-panel">
+            <div class="recent-version-list">
+              <div v-for="item in g.items" :key="item.id" class="recent-version-row">
+                <span class="v-label">{{ cachedVersionLabel(item) || '—' }}</span>
+                <CountryFlag v-if="item.region" :code="item.region" />
+                <span class="v-size">{{ fmtSize(item.size_bytes) }}</span>
+                <a
+                  class="btn btn-dl btn-sm"
+                  href="#"
+                  @click.prevent="downloadTask(item.id)"
+                >{{ t('home.download') }}</a>
+              </div>
             </div>
           </div>
         </article>
@@ -269,6 +292,7 @@ async function downloadTask(id) {
 const activeJobs = reactive({})
 const cachedByBundle = reactive({})
 const expandedVersions = reactive({})
+const expandedRecent = reactive({})
 const cachedModal = reactive({ open: false, bundleId: '', appName: '' })
 const versionData = reactive({})
 let pollTimer = null
@@ -435,6 +459,22 @@ function cardClass(bundleId) {
 function cachedFor(bundleId) {
   return cachedByBundle[bundleId] || []
 }
+
+const recentGroups = computed(() => {
+  const groups = []
+  const byBundle = new Map()
+  for (const c of cache.value) {
+    let g = byBundle.get(c.bundle_id)
+    if (g) {
+      g.items.push(c)
+    } else {
+      g = { bundleId: c.bundle_id, items: [c] }
+      byBundle.set(c.bundle_id, g)
+      groups.push(g)
+    }
+  }
+  return groups
+})
 
 function cachedVersionLabel(item) {
   if (item.display_version) return `v${item.display_version}`
@@ -780,6 +820,24 @@ h1 { font-size: 1.35rem; margin: 0; font-weight: 650; line-height: 1.15; }
 .version-load-more:disabled { opacity: .6; cursor: default; }
 .v-label { font-size: .8rem; font-weight: 550; }
 .v-date { font-size: .62rem; color: var(--text-3); }
+.recent-version-list {
+  display: flex;
+  flex-direction: column;
+  gap: .35rem;
+  max-height: 240px;
+  overflow-y: auto;
+}
+.recent-version-row {
+  display: flex;
+  align-items: center;
+  gap: .45rem;
+  padding: .5rem .65rem;
+  border-radius: 9px;
+  border: 1px solid var(--line);
+  background: var(--surface-2);
+  font-size: .78rem;
+}
+.recent-version-row .v-size { flex: 1; font-size: .62rem; color: var(--text-3); }
 .cached-picker { width: min(420px, 100%); margin: 0; max-height: 80vh; overflow: auto; }
 .cached-picker h2 { margin: 0 0 .35rem; font-size: 1rem; }
 .cached-picker .cached-header {
