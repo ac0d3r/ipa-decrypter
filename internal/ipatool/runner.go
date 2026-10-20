@@ -169,13 +169,6 @@ func (r Runner) GetVersionMetadata(ctx context.Context, homeDir, bundleID string
 	return r.Run(ctx, homeDir, args...)
 }
 
-func (r Runner) Search(ctx context.Context, homeDir, term string, limit int) (Result, error) {
-	if limit <= 0 {
-		limit = 5
-	}
-	return r.Run(ctx, homeDir, "search", term, "--limit", fmt.Sprintf("%d", limit))
-}
-
 func WithTimeout(parent context.Context, d time.Duration) (context.Context, context.CancelFunc) {
 	if parent == nil {
 		parent = context.Background()

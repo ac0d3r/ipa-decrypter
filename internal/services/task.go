@@ -260,6 +260,23 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 	return task, nil
 }
 
+// RecoverInterrupted marks tasks that were left in an active state by a
+// previous server shutdown as failed. Encrypted IPAs already on disk are
+// kept so a retry can reuse them without downloading again.
+func (s *TaskService) RecoverInterrupted() {
+	tasks, err := s.db.ListActiveTasks()
+	if err != nil {
+		taskLog.WithField("error", err.Error()).Warn("failed to list interrupted tasks")
+		return
+	}
+	for i := range tasks {
+		s.fail(&tasks[i], "interrupted by server restart")
+	}
+	if len(tasks) > 0 {
+		taskLog.WithField("count", len(tasks)).Info("marked interrupted tasks as failed")
+	}
+}
+
 func (s *TaskService) kickRunIfIdle(id string) {
 	if _, running := s.running.Load(id); !running {
 		go s.run(id)
@@ -569,5 +586,10 @@ func (s *TaskService) fail(task *db.Task, msg string) {
 		"bundle_id": task.BundleID,
 		"error":     msg,
 	}).Error("task failed")
-	_ = s.db.UpdateTask(*task)
+	if err := s.db.UpdateTask(*task); err != nil {
+		taskLog.WithFields(map[string]any{
+			"task_id": task.ID,
+			"error":   err.Error(),
+		}).Error("failed to persist task failure")
+	}
 }

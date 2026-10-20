@@ -56,7 +56,11 @@ func (s *AuthService) EnsureBootstrapAdmin() error {
 	if _, err := s.createUser(username, password, true); err != nil {
 		return err
 	}
-	logger.WithComponent("auth").WithField("username", username).Info("bootstrapped admin user")
+	log := logger.WithComponent("auth")
+	if password == "admin" {
+		log.Warn("ADMIN_PASSWORD is using the default value; set ADMIN_PASSWORD or change it after first login")
+	}
+	log.WithField("username", username).Info("bootstrapped admin user")
 	return nil
 }
 
@@ -223,6 +227,15 @@ func (s *AuthService) DeleteUser(id, actorID string) error {
 	}
 	if u.ID == actorID {
 		return fmt.Errorf("cannot delete yourself")
+	}
+	if u.IsAdmin {
+		n, err := s.db.CountAdmins()
+		if err != nil {
+			return err
+		}
+		if n <= 1 {
+			return fmt.Errorf("cannot delete the last admin")
+		}
 	}
 	return s.db.DeleteUser(id)
 }

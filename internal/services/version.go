@@ -20,6 +20,8 @@ var versionLog = logger.WithComponent("version")
 const (
 	versionPageSize   = 5
 	versionIDCacheTTL = 30 * time.Minute
+	// Upper bound of concurrent ipatool metadata calls per page.
+	metadataConcurrency = 4
 )
 
 type VersionService struct {
@@ -83,10 +85,10 @@ func (s *VersionService) ListPage(bundleID, region string, appID int64, offset, 
 	}
 	total := len(ids)
 	if total == 0 {
-		return VersionPage{Total: 0, Offset: offset, Limit: limit}, nil
+		return VersionPage{Versions: []AppVersion{}, Total: 0, Offset: offset, Limit: limit}, nil
 	}
 	if offset >= total {
-		return VersionPage{Total: total, Offset: offset, Limit: limit}, nil
+		return VersionPage{Versions: []AppVersion{}, Total: total, Offset: offset, Limit: limit}, nil
 	}
 
 	end := offset + limit
@@ -232,7 +234,7 @@ func (s *VersionService) fetchMetadata(home, bundleID string, appID int64, ids [
 	}
 	ch := make(chan item, len(ids))
 	var wg sync.WaitGroup
-	sem := make(chan struct{}, len(ids))
+	sem := make(chan struct{}, metadataConcurrency)
 
 	for i, id := range ids {
 		wg.Add(1)

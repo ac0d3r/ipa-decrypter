@@ -224,13 +224,17 @@ func generateVoucherBatch(count int) ([]db.Voucher, []string, error) {
 }
 
 func generateVoucherCode() (string, error) {
-	raw := make([]byte, voucherRawLen)
-	if _, err := rand.Read(raw); err != nil {
-		return "", err
-	}
-	out := make([]byte, voucherRawLen)
-	for i, b := range raw {
-		out[i] = voucherAlphabet[int(b)%len(voucherAlphabet)]
+	out := make([]byte, 0, voucherRawLen)
+	for len(out) < voucherRawLen {
+		var b [1]byte
+		if _, err := rand.Read(b[:]); err != nil {
+			return "", err
+		}
+		// Reject modulo bias: len(voucherAlphabet)*7 == 231 < 256.
+		if int(b[0]) >= len(voucherAlphabet)*7 {
+			continue
+		}
+		out = append(out, voucherAlphabet[int(b[0])%len(voucherAlphabet)])
 	}
 	return string(out[:4]) + "-" + string(out[4:]), nil
 }

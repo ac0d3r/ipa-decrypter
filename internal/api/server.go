@@ -24,6 +24,8 @@ func (s *Server) Engine() *gin.Engine {
 	r := gin.New()
 	r.Use(gin.Recovery())
 
+	s.limiter = newRateLimiter()
+
 	r.GET("/health", s.handleHealth)
 
 	s.registerPublicRoutes(r)

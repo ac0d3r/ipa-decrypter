@@ -130,6 +130,10 @@ func (c *UnfairdClient) DownloadOutput(ctx context.Context, downloadURL, destPat
 		return err
 	}
 	defer f.Close()
-	_, err = io.Copy(f, resp.Body)
-	return err
+	if _, err := io.Copy(f, resp.Body); err != nil {
+		// Don't leave a partial (corrupt) file behind.
+		_ = os.Remove(destPath)
+		return err
+	}
+	return nil
 }

@@ -61,13 +61,6 @@ type Task struct {
 	UpdatedAt         time.Time `json:"updated_at"`
 }
 
-type Secret struct {
-	Key   string `gorm:"primaryKey"`
-	Value string
-}
-
-func (Secret) TableName() string { return "secrets" }
-
 // User is a web login account. Admins access the backend via IsAdmin.
 type User struct {
 	ID               string     `gorm:"primaryKey" json:"id"`

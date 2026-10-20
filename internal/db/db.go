@@ -1,9 +1,6 @@
 package db
 
 import (
-	"encoding/json"
-	"fmt"
-
 	"github.com/glebarez/sqlite"
 	"gorm.io/gorm"
 )
@@ -41,7 +38,6 @@ func (d *DB) migrate() error {
 	return d.gorm.AutoMigrate(
 		&AccountRow{},
 		&Device{},
-		&Secret{},
 		&Task{},
 		&User{},
 		&Voucher{},
@@ -96,16 +92,6 @@ func (d *DB) DeleteDevice(id string) error {
 	return d.gorm.Delete(&Device{}, "id = ?", id).Error
 }
 
-func (d *DB) SetSecret(key, value string) error {
-	return d.gorm.Save(&Secret{Key: key, Value: value}).Error
-}
-
-func (d *DB) GetSecret(key string) (string, error) {
-	var s Secret
-	err := d.gorm.First(&s, "key = ?", key).Error
-	return s.Value, err
-}
-
 func (d *DB) CreateUser(u *User) error {
 	return d.gorm.Create(u).Error
 }
@@ -158,12 +144,4 @@ func (d *DB) CountAdmins() (int64, error) {
 	var n int64
 	err := d.gorm.Model(&User{}).Where("is_admin = ?", true).Count(&n).Error
 	return n, err
-}
-
-func MustJSON(v any) string {
-	b, err := json.Marshal(v)
-	if err != nil {
-		return fmt.Sprintf("%v", v)
-	}
-	return string(b)
 }

@@ -70,9 +70,6 @@ func (l *rateLimiter) allow(key string, limit int, window time.Duration) bool {
 
 func (s *Server) rateLimit(limit int) gin.HandlerFunc {
 	return func(c *gin.Context) {
-		if s.limiter == nil {
-			s.limiter = newRateLimiter()
-		}
 		key := c.FullPath() + "|" + c.ClientIP()
 		if u := currentUser(c); u.ID != "" {
 			key = c.FullPath() + "|" + u.ID

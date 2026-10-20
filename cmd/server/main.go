@@ -29,6 +29,7 @@ func main() {
 	if err := svc.Auth.EnsureBootstrapAdmin(); err != nil {
 		log.WithError(err).Fatal("bootstrap admin failed")
 	}
+	svc.Tasks.RecoverInterrupted()
 
 	srv := &api.Server{
 		Registry: svc,
