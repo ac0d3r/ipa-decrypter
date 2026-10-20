@@ -15,10 +15,15 @@ Search apps by name or Bundle ID in the browser; the server downloads the encryp
 ## Installation
 
 ```bash
+# Option 1 — use the published image (a new one is pushed on every v* tag):
+docker pull ghcr.io/ac0d3r/ipa-decrypter:latest
+docker tag ghcr.io/ac0d3r/ipa-decrypter:latest ipa-decrypter:latest
+docker compose up -d
+
+# Option 2 — build the image locally, then run:
+docker compose build
 docker compose up -d
 ```
-
-Or use the image published on every `v*` tag: `docker pull ghcr.io/ac0d3r/ipa-decrypter:latest`
 
 Once running:
 
