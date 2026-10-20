@@ -6,7 +6,7 @@ Search apps by name or Bundle ID in the browser; the server downloads the encryp
 
 ## Requirements
 
-- Docker (recommended), or Go 1.27 + Node 22 to build from source
+- Docker (recommended), or Go 1.27 + Bun to build from source
 - A jailbroken iOS device running [unfaird](https://github.com/lbr77/unfaird), on the same LAN as the server (or otherwise reachable)
 - At least one Apple ID with access to the App Store
 

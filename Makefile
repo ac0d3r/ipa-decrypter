@@ -2,13 +2,13 @@
 
 BIN         ?= bin/ipa-decrypter
 GO          ?= go
-NPM         ?= npm
+BUN         ?= bun
 UNFAIRD_DIR ?= third-party/unfaird
 
 help:
 	@echo "ipa-decrypter"
 	@echo ""
-	@echo "  make deps           Install Go + npm dependencies"
+	@echo "  make deps           Install Go + bun dependencies"
 	@echo "  make build          Build backend binary to $(BIN)"
 	@echo "  make build-web      Build frontend to web/dist"
 	@echo "  make build-all      Build backend + frontend"
@@ -20,14 +20,14 @@ help:
 
 deps:
 	$(GO) mod download
-	cd web && $(NPM) install
+	cd web && $(BUN) install
 
 build:
 	@mkdir -p $(dir $(BIN))
 	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '-s -w' -o $(BIN) ./cmd/server
 
 build-web:
-	cd web && $(NPM) run build
+	cd web && $(BUN) run build
 
 build-all: build build-web
 
@@ -58,7 +58,7 @@ install-unfaird:
 	&& ssh -p $$port $$host 'dpkg -i /tmp/*.deb'
 
 dev-web:
-	cd web && $(NPM) run dev
+	cd web && $(BUN) run dev
 
 ci:
 	@gofmt -w $$(find . -name '*.go' -not -path './vendor/*')
