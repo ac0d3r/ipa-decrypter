@@ -66,8 +66,8 @@ func (s *AccountService) List() ([]db.Account, error) {
 		return nil, err
 	}
 	out := make([]db.Account, 0, len(rows))
-	for _, r := range rows {
-		out = append(out, r.Account)
+	for i := range rows {
+		out = append(out, rows[i].Account)
 	}
 	return out, nil
 }

@@ -3,10 +3,12 @@ package ipatool
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
+	"slices"
 	"strings"
 	"time"
 
@@ -50,7 +52,7 @@ func (r Runner) run(ctx context.Context, homeDir string, verbose bool, args ...s
 	if verbose {
 		global = append(global, "--verbose")
 	}
-	full := append(global, args...)
+	full := append(slices.Clone(global), args...)
 
 	cmd := exec.CommandContext(ctx, r.Bin, full...)
 	env := append(os.Environ(), "HOME="+homeDir)
@@ -76,7 +78,8 @@ func (r Runner) run(ctx context.Context, homeDir string, verbose bool, args ...s
 		ExitCode: 0,
 	}
 	if err != nil {
-		if ee, ok := err.(*exec.ExitError); ok {
+		var ee *exec.ExitError
+		if errors.As(err, &ee) {
 			res.ExitCode = ee.ExitCode()
 		} else {
 			res.ExitCode = -1

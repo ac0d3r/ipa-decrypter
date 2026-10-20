@@ -42,7 +42,7 @@ type DecryptExit struct {
 }
 
 func (c *UnfairdClient) Health(ctx context.Context) error {
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/health", nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.BaseURL+"/health", http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -109,7 +109,7 @@ func (c *UnfairdClient) DownloadOutput(ctx context.Context, downloadURL, destPat
 	if strings.HasPrefix(url, "/") {
 		url = c.BaseURL + url
 	}
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, nil)
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, url, http.NoBody)
 	if err != nil {
 		return err
 	}
@@ -122,7 +122,7 @@ func (c *UnfairdClient) DownloadOutput(ctx context.Context, downloadURL, destPat
 		body, _ := io.ReadAll(io.LimitReader(resp.Body, 2048))
 		return fmt.Errorf("download status %d: %s", resp.StatusCode, string(body))
 	}
-	if err := os.MkdirAll(filepath.Dir(destPath), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(destPath), 0o750); err != nil {
 		return err
 	}
 	f, err := os.Create(destPath)

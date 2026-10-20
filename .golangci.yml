@@ -1,0 +1,61 @@
+version: "2"
+
+run:
+  timeout: 5m
+
+linters:
+  default: standard
+  enable:
+    - gocritic
+    - revive
+    - gosec
+    - bodyclose
+    - misspell
+    - errorlint
+
+  settings:
+    revive:
+      rules:
+        - name: exported
+          disabled: true
+    gocritic:
+      enabled-tags:
+        - performance
+        - style
+        - diagnostic
+      settings:
+        hugeParam:
+          sizeThreshold: 512
+    gosec:
+      # G204/G304: running ipatool and reading/writing user-specified paths is the tool's purpose.
+      # G404: picking a random candidate account/device is not cryptographic.
+      # G124: session cookies must also work over plain HTTP on LAN deployments.
+      excludes:
+        - G204
+        - G304
+        - G404
+        - G124
+    errcheck:
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+        - (net.Conn).Close
+        - (net.Listener).Close
+        - (io.Closer).Close
+        - (io/fs.File).Close
+        - (*os.File).Close
+        - (*io.PipeWriter).Close
+        - syscall.Close
+        - os.Remove
+        - os.RemoveAll
+        - (*os.Process).Kill
+  exclusions:
+    rules:
+      - path: _test\.go
+        linters:
+          - errcheck
+          - gosec
+          - gocyclo
+          - funlen
+          - gocritic

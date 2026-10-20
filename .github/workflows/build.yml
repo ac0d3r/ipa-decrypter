@@ -1,0 +1,37 @@
+name: Build
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "web/**"
+      - "third-party/ipatool/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/build.yml"
+  pull_request:
+    paths:
+      - "cmd/**"
+      - "internal/**"
+      - "web/**"
+      - "third-party/ipatool/**"
+      - "Dockerfile"
+      - ".dockerignore"
+      - ".github/workflows/build.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  docker:
+    name: Docker image
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build image
+        run: docker build -t ipa-decrypter:ci .

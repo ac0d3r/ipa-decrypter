@@ -287,13 +287,14 @@ func (s *VersionService) accountForRegion(region string) (db.Account, string, er
 	if err != nil {
 		return db.Account{}, "", err
 	}
-	for _, a := range accounts {
+	for i := range accounts {
+		a := &accounts[i]
 		if a.Status == "logged_in" && strings.EqualFold(a.Region, region) {
 			home, err := s.accounts.HomeDir(a.ID)
 			if err != nil {
 				return db.Account{}, "", err
 			}
-			return a, home, nil
+			return *a, home, nil
 		}
 	}
 	return db.Account{}, "", fmt.Errorf("no logged-in account for region %s", region)

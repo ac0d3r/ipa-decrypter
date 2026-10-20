@@ -134,8 +134,8 @@ func (s *AuthService) voucherRedeemers() ([]VoucherRedeemer, error) {
 		return nil, err
 	}
 	out := make([]VoucherRedeemer, 0, len(users))
-	for _, u := range users {
-		out = append(out, VoucherRedeemer{ID: u.ID, Username: u.Username})
+	for i := range users {
+		out = append(out, VoucherRedeemer{ID: users[i].ID, Username: users[i].Username})
 	}
 	return out, nil
 }
@@ -152,8 +152,8 @@ func (s *AuthService) toVoucherViews(items []db.Voucher) ([]VoucherView, error) 
 		return nil, err
 	}
 	names := make(map[string]string, len(users))
-	for _, u := range users {
-		names[u.ID] = u.Username
+	for i := range users {
+		names[users[i].ID] = users[i].Username
 	}
 	out := make([]VoucherView, 0, len(items))
 	for _, v := range items {

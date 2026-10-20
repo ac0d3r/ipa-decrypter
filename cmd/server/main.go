@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"time"
 
 	"github.com/ac0d3r/ipa-decrypter/internal/api"
 	"github.com/ac0d3r/ipa-decrypter/internal/config"
@@ -22,7 +23,7 @@ func main() {
 	if err != nil {
 		log.WithError(err).Fatal("open database failed")
 	}
-	defer database.Close()
+	defer func() { _ = database.Close() }()
 
 	svc := services.NewRegistry(cfg, database)
 	if err := svc.Auth.EnsureBootstrapAdmin(); err != nil {
@@ -39,7 +40,13 @@ func main() {
 		"data":   cfg.DataDir,
 	}).Info("ipa-decrypter starting")
 
-	if err := http.ListenAndServe(cfg.ListenAddr, srv.Engine()); err != nil {
+	httpServer := &http.Server{
+		Addr:              cfg.ListenAddr,
+		Handler:           srv.Engine(),
+		ReadHeaderTimeout: 30 * time.Second,
+		IdleTimeout:       120 * time.Second,
+	}
+	if err := httpServer.ListenAndServe(); err != nil {
 		log.WithError(err).Fatal("http server stopped")
 	}
 }

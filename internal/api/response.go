@@ -38,7 +38,8 @@ func writeErr(c *gin.Context, err error) {
 	case errors.Is(err, db.ErrVoucherUsed):
 		msg = "voucher already used"
 	default:
-		if ae, ok := err.(apiError); ok {
+		var ae apiError
+		if errors.As(err, &ae) {
 			code = ae.status
 			msg = ae.message
 		}
@@ -51,7 +52,8 @@ func writeErr(c *gin.Context, err error) {
 }
 
 func writeAccountErr(c *gin.Context, err error) {
-	if le, ok := err.(*services.AccountLoginError); ok {
+	var le *services.AccountLoginError
+	if errors.As(err, &le) {
 		payload := gin.H{
 			"error":     le.Message,
 			"needs_2fa": le.Needs2FA,

@@ -24,7 +24,7 @@ func newRateLimiter() *rateLimiter {
 	return &rateLimiter{hits: map[string][]time.Time{}}
 }
 
-func (l *rateLimiter) allow(key string, max int, window time.Duration) bool {
+func (l *rateLimiter) allow(key string, limit int, window time.Duration) bool {
 	now := time.Now()
 	cutoff := now.Add(-window)
 
@@ -60,7 +60,7 @@ func (l *rateLimiter) allow(key string, max int, window time.Duration) bool {
 			}
 		}
 	}
-	if len(times) >= max {
+	if len(times) >= limit {
 		l.hits[key] = times
 		return false
 	}
@@ -68,7 +68,7 @@ func (l *rateLimiter) allow(key string, max int, window time.Duration) bool {
 	return true
 }
 
-func (s *Server) rateLimit(max int) gin.HandlerFunc {
+func (s *Server) rateLimit(limit int) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		if s.limiter == nil {
 			s.limiter = newRateLimiter()
@@ -77,7 +77,7 @@ func (s *Server) rateLimit(max int) gin.HandlerFunc {
 		if u := currentUser(c); u.ID != "" {
 			key = c.FullPath() + "|" + u.ID
 		}
-		if !s.limiter.allow(key, max, time.Minute) {
+		if !s.limiter.allow(key, limit, time.Minute) {
 			writeErr(c, errStatus(http.StatusTooManyRequests, "too many requests"))
 			c.Abort()
 			return

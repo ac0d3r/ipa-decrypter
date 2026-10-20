@@ -1,6 +1,7 @@
 package services
 
 import (
+	"errors"
 	"os"
 	"path/filepath"
 	"sync"
@@ -113,7 +114,7 @@ func TestDeleteActiveTaskRejected(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	if err := s.Delete(existing.ID); err != ErrTaskNotDeletable {
+	if err := s.Delete(existing.ID); !errors.Is(err, ErrTaskNotDeletable) {
 		t.Fatalf("err = %v, want ErrTaskNotDeletable", err)
 	}
 	if _, err := database.GetTask(existing.ID); err != nil {

@@ -23,8 +23,8 @@ func (s *Server) handleListUsers(c *gin.Context) {
 		return
 	}
 	out := make([]gin.H, 0, len(items))
-	for _, u := range items {
-		out = append(out, userJSON(u))
+	for i := range items {
+		out = append(out, userJSON(items[i]))
 	}
 	c.JSON(http.StatusOK, out)
 }

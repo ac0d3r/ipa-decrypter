@@ -102,7 +102,7 @@ func Search(term, country string, limit int) ([]AppResult, error) {
 }
 
 func fetch(u string) ([]AppResult, error) {
-	req, err := http.NewRequest(http.MethodGet, u, nil)
+	req, err := http.NewRequest(http.MethodGet, u, http.NoBody)
 	if err != nil {
 		return nil, err
 	}

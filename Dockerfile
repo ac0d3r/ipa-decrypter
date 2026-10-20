@@ -7,7 +7,7 @@ RUN npm ci
 COPY web/ ./
 RUN npm run build
 
-FROM golang:1.25-alpine AS ipatool
+FROM golang:1.27-alpine AS ipatool
 # CGO required: byteness/keyring → onepassword-sdk-go fails to compile with CGO_ENABLED=0 on linux.
 RUN apk add --no-cache git patch gcc musl-dev
 WORKDIR /src/ipatool
@@ -25,7 +25,7 @@ RUN git apply --check /tmp/keyring-backend-flag.patch \
     && git apply /tmp/keyring-backend-flag.patch
 RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /ipatool .
 
-FROM golang:1.25-alpine AS backend
+FROM golang:1.27-alpine AS backend
 WORKDIR /src
 COPY go.mod go.sum ./
 RUN go mod download

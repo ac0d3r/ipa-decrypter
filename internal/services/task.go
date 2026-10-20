@@ -108,7 +108,8 @@ func (s *TaskService) CachedByBundles(region string, bundleIDs []string) (map[st
 	}
 	out := make(map[string][]db.Task)
 	seen := make(map[string]map[string]bool)
-	for _, t := range tasks {
+	for i := range tasks {
+		t := &tasks[i]
 		verKey := t.DisplayVersion
 		if verKey == "" {
 			verKey = t.ExternalVersionID
@@ -123,7 +124,7 @@ func (s *TaskService) CachedByBundles(region string, bundleIDs []string) (map[st
 			continue
 		}
 		seen[t.BundleID][verKey] = true
-		out[t.BundleID] = append(out[t.BundleID], t)
+		out[t.BundleID] = append(out[t.BundleID], *t)
 	}
 	return out, nil
 }
@@ -135,7 +136,8 @@ func (s *TaskService) Regions() ([]db.RegionInfo, error) {
 	}
 	seen := map[string]struct{}{}
 	var out []db.RegionInfo
-	for _, a := range accounts {
+	for i := range accounts {
+		a := &accounts[i]
 		if a.Status != "logged_in" || a.Region == "" {
 			continue
 		}
@@ -177,15 +179,16 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 		return db.Task{}, err
 	}
 	extVer := in.ExternalVersionID
-	for _, t := range tasks {
-		if sameVersion(t, in.BundleID, in.Region, extVer) {
+	for i := range tasks {
+		t := &tasks[i]
+		if sameVersion(*t, in.BundleID, in.Region, extVer) {
 			taskLog.WithFields(map[string]any{
 				"task_id":   t.ID,
 				"bundle_id": in.BundleID,
 				"region":    in.Region,
 			}).Info("reusing active task")
 			s.kickRunIfIdle(t.ID)
-			return t, nil
+			return *t, nil
 		}
 	}
 
@@ -269,9 +272,10 @@ func (s *TaskService) pickAccount(region string) (db.Account, error) {
 		return db.Account{}, err
 	}
 	var candidates []db.Account
-	for _, a := range accounts {
+	for i := range accounts {
+		a := &accounts[i]
 		if a.Status == "logged_in" && strings.EqualFold(a.Region, region) {
-			candidates = append(candidates, a)
+			candidates = append(candidates, *a)
 		}
 	}
 	if len(candidates) == 0 {
@@ -286,9 +290,10 @@ func (s *TaskService) pickDevice() (db.Device, error) {
 		return db.Device{}, err
 	}
 	var candidates []db.Device
-	for _, d := range devices {
+	for i := range devices {
+		d := &devices[i]
 		if d.Status == "online" {
-			candidates = append(candidates, d)
+			candidates = append(candidates, *d)
 		}
 	}
 	if len(candidates) == 0 {
@@ -459,9 +464,9 @@ func (s *TaskService) findReusableCompleted(bundleID, region, externalVersionID,
 	if err != nil {
 		return db.Task{}, false
 	}
-	for _, t := range tasks {
-		if outputReady(&t) {
-			return t, true
+	for i := range tasks {
+		if outputReady(&tasks[i]) {
+			return tasks[i], true
 		}
 	}
 	return db.Task{}, false
@@ -472,9 +477,9 @@ func (s *TaskService) findReusableFailed(bundleID, region, externalVersionID str
 	if err != nil {
 		return db.Task{}, false
 	}
-	for _, t := range tasks {
-		if encryptedReady(&t) {
-			return t, true
+	for i := range tasks {
+		if encryptedReady(&tasks[i]) {
+			return tasks[i], true
 		}
 	}
 	return db.Task{}, false
