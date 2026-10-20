@@ -2,29 +2,13 @@ name: Build
 
 on:
   push:
-    branches:
-      - main
-    paths:
-      - "cmd/**"
-      - "internal/**"
-      - "web/**"
-      - "third-party/ipatool/**"
-      - "Dockerfile"
-      - ".dockerignore"
-      - ".github/workflows/build.yml"
-  pull_request:
-    paths:
-      - "cmd/**"
-      - "internal/**"
-      - "web/**"
-      - "third-party/ipatool/**"
-      - "Dockerfile"
-      - ".dockerignore"
-      - ".github/workflows/build.yml"
+    tags:
+      - 'v*'
   workflow_dispatch:
 
 permissions:
   contents: read
+  packages: write
 
 jobs:
   docker:
@@ -33,5 +17,18 @@ jobs:
     steps:
       - uses: actions/checkout@v4
 
-      - name: Build image
-        run: docker build -t ipa-decrypter:ci .
+      - name: Login to ghcr.io
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+
+      - name: Build and push
+        env:
+          IMAGE: ghcr.io/${{ github.repository_owner }}/ipa-decrypter
+          REF: ${{ github.ref_name }}
+        run: |
+          IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
+          docker build -t "$IMAGE:$REF" .
+          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
+            docker tag "$IMAGE:$REF" "$IMAGE:latest"
+            docker push "$IMAGE:$REF"
+            docker push "$IMAGE:latest"
+          fi
