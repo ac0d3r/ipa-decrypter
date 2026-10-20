@@ -3,16 +3,17 @@
 FROM node:22-alpine AS web
 WORKDIR /src/web
 COPY web/package.json web/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,target=/root/.npm npm ci
 COPY web/ ./
 RUN npm run build
 
 FROM golang:1.27-alpine AS ipatool
 # CGO required: byteness/keyring → onepassword-sdk-go fails to compile with CGO_ENABLED=0 on linux.
-RUN apk add --no-cache git patch gcc musl-dev
+RUN apk add --no-cache git gcc musl-dev
 WORKDIR /src/ipatool
 ARG IPATOOL_VERSION=latest
-# "latest" resolves to the newest git tag at build time; pass `--build-arg IPATOOL_VERSION=<tag>` to pin.
+# "latest" resolves to the newest git tag at build time; pass `--build-arg IPATOOL_VERSION=<tag>` to pin
+# (CI passes the resolved tag so layer caching busts only on new ipatool releases).
 RUN if [ "$IPATOOL_VERSION" = "latest" ]; then \
         IPATOOL_VERSION="$(git ls-remote --tags --sort=-v:refname https://github.com/majd/ipatool.git \
             | grep -v '\^{}' | head -n1 | awk -F/ '{print $NF}')"; \
@@ -23,18 +24,24 @@ RUN if [ "$IPATOOL_VERSION" = "latest" ]; then \
 COPY third-party/ipatool/keyring-backend-flag.patch /tmp/keyring-backend-flag.patch
 RUN git apply --check /tmp/keyring-backend-flag.patch \
     && git apply /tmp/keyring-backend-flag.patch
-RUN CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /ipatool .
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=1 go build -trimpath -ldflags="-s -w" -o /ipatool .
 
 FROM golang:1.27-alpine AS backend
 WORKDIR /src
 COPY go.mod go.sum ./
-RUN go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    go mod download
 COPY cmd/ ./cmd/
 COPY internal/ ./internal/
 COPY --from=web /src/web/dist ./web/dist
-RUN CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /ipa-decrypter ./cmd/server
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /ipa-decrypter ./cmd/server
 
-FROM alpine:3.21
+FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata \
     && adduser -D -H -u 1000 app
 WORKDIR /app
@@ -51,5 +58,5 @@ USER app
 EXPOSE 8080
 VOLUME ["/data"]
 HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
-    CMD wget -qO- http://127.0.0.1:8080/health >/dev/null || exit 1
+    CMD wget -q --spider http://127.0.0.1:8080/health || exit 1
 ENTRYPOINT ["/app/ipa-decrypter"]

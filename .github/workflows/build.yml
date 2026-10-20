@@ -15,20 +15,44 @@ jobs:
     name: Docker image
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
 
-      - name: Login to ghcr.io
-        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u ${{ github.actor }} --password-stdin
+      - uses: docker/setup-buildx-action@v4
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Resolve image tags
+        env:
+          IS_TAG: ${{ startsWith(github.ref, 'refs/tags/') }}
+        run: |
+          IMAGE="ghcr.io/${GITHUB_REPOSITORY_OWNER,,}/ipa-decrypter"
+          TAGS="$IMAGE:${GITHUB_REF_NAME}"
+          if [[ "$IS_TAG" == "true" ]]; then
+            TAGS="$TAGS,$IMAGE:latest"
+          fi
+          echo "TAGS=$TAGS" >> "$GITHUB_ENV"
+
+      # Resolve the ipatool version up front so the build-arg (and thus the layer
+      # cache key) changes only when a new ipatool tag is released; the Dockerfile
+      # default "latest" would otherwise be frozen by a cache hit.
+      - name: Resolve latest ipatool version
+        run: |
+          IPATOOL_VERSION="$(git ls-remote --tags --sort=-v:refname https://github.com/majd/ipatool.git \
+            | grep -v '\^{}' | head -n1 | awk -F/ '{print $NF}')"
+          [ -n "$IPATOOL_VERSION" ] || { echo "failed to resolve ipatool version" >&2; exit 1; }
+          echo "Building ipatool ${IPATOOL_VERSION}" >&2
+          echo "IPATOOL_VERSION=$IPATOOL_VERSION" >> "$GITHUB_ENV"
 
       - name: Build and push
-        env:
-          IMAGE: ghcr.io/${{ github.repository_owner }}/ipa-decrypter
-          REF: ${{ github.ref_name }}
-        run: |
-          IMAGE="$(echo "$IMAGE" | tr '[:upper:]' '[:lower:]')"
-          docker build -t "$IMAGE:$REF" .
-          if [[ "${{ github.ref }}" == refs/tags/* ]]; then
-            docker tag "$IMAGE:$REF" "$IMAGE:latest"
-            docker push "$IMAGE:$REF"
-            docker push "$IMAGE:latest"
-          fi
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: ${{ startsWith(github.ref, 'refs/tags/') }}
+          tags: ${{ env.TAGS }}
+          build-args: IPATOOL_VERSION=${{ env.IPATOOL_VERSION }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
