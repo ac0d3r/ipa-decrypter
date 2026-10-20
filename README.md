@@ -1,13 +1,13 @@
 # ipa-decrypter
 
-Yet another auto-ipa-decrypter tool (Powered by [ipatool](https://github.com/majd/ipatool) & [unfaird](https://github.com/ac0d3r/unfaird)).
+Yet another auto-ipa-decrypter tool (Powered by [ipatool](https://github.com/majd/ipatool) & [unfaird](https://github.com/lbr77/unfaird)).
 
 Search apps by name or Bundle ID in the browser; the server downloads the encrypted IPA from the App Store via ipatool, and a jailbroken iOS device running unfaird handles the decryption in the background. It ships with a download queue, live progress, a local cache, user accounts (invite-code registration) and multiple App Store storefront accounts. UI inspired by [decrypt.34306.lol](https://decrypt.34306.lol/).
 
 ## Requirements
 
 - Docker (recommended), or Go 1.27 + Node 22 to build from source
-- A jailbroken iOS device running [unfaird](https://github.com/ac0d3r/unfaird), on the same LAN as the server (or otherwise reachable)
+- A jailbroken iOS device running [unfaird](https://github.com/lbr77/unfaird), on the same LAN as the server (or otherwise reachable)
 - At least one Apple ID with access to the App Store
 
 > Multiple accounts / storefronts are supported (the matching logged-in account is picked automatically per storefront), but only a single-account setup has been tested so far.
@@ -65,5 +65,5 @@ Use this project for research only, and only with apps you are licensed to. Use 
 ## Credits
 
 - [ipatool](https://github.com/majd/ipatool) — App Store authentication & IPA downloads
-- [unfaird](https://github.com/ac0d3r/unfaird) — decryption daemon on the jailbroken device
+- [unfaird](https://github.com/lbr77/unfaird) — decryption daemon on the jailbroken device
 - UI inspired by [decrypt.34306.lol](https://decrypt.34306.lol/)
