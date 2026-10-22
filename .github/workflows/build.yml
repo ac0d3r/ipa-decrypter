@@ -15,6 +15,7 @@ jobs:
   resolve:
     runs-on: ubuntu-latest
     outputs:
+      image: ${{ steps.tags.outputs.image }}
       tags: ${{ steps.tags.outputs.tags }}
       push: ${{ steps.tags.outputs.push }}
       ipatool_version: ${{ steps.ipatool.outputs.ipatool_version }}
@@ -53,6 +54,7 @@ jobs:
             TAGS="$TAGS,$IMAGE:latest"
           fi
           echo "Building image ${TAGS}" >&2
+          echo "image=$IMAGE" >> "$GITHUB_OUTPUT"
           echo "tags=$TAGS" >> "$GITHUB_OUTPUT"
           echo "push=$IS_TAG" >> "$GITHUB_OUTPUT"
 
@@ -82,13 +84,16 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
+      # Repository name only, no version tag. Each arch is pushed by digest;
+      # the merge job attaches the version tags to the multi-arch manifest.
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v7
         with:
           context: .
           platforms: ${{ matrix.platform }}
-          push: ${{ needs.resolve.outputs.push == 'true' }}
+          tags: ${{ needs.resolve.outputs.push == 'true' && needs.resolve.outputs.image || '' }}
+          outputs: ${{ needs.resolve.outputs.push == 'true' && 'type=image,push-by-digest=true,name-canonical=true,push=true' || '' }}
           build-args: |
             IPATOOL_VERSION=${{ needs.resolve.outputs.ipatool_version }}
             FAIRPLAY_VERSION=${{ needs.resolve.outputs.fairplay_version }}

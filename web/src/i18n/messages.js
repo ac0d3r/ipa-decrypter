@@ -2,7 +2,7 @@ export const messages = {
   zh: {
     brand: {
       title: 'IPA Decrypter',
-      subtitle: 'Powered by ipatool & unfaird',
+      subtitle: 'Powered by ipatool, unfaird & fairplay-decrypt',
     },
     nav: {
       admin: '后台',
@@ -183,7 +183,7 @@ export const messages = {
   en: {
     brand: {
       title: 'IPA Decrypter',
-      subtitle: 'Powered by ipatool & unfaird',
+      subtitle: 'Powered by ipatool, unfaird & fairplay-decrypt',
     },
     nav: {
       admin: 'Admin',
