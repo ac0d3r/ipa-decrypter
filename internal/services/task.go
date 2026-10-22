@@ -17,6 +17,7 @@ import (
 	"github.com/ac0d3r/ipa-decrypter/internal/ipatool"
 	"github.com/ac0d3r/ipa-decrypter/internal/logger"
 	"github.com/ac0d3r/ipa-decrypter/internal/unfaird"
+	"github.com/ac0d3r/ipa-decrypter/third-party/fairplay"
 	"github.com/google/uuid"
 )
 
@@ -223,10 +224,10 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 	if err != nil {
 		return db.Task{}, err
 	}
-	dev, err := s.pickDevice()
-	if err != nil {
-		return db.Task{}, err
-	}
+	// Decryption prefers local FairPlay decryption; a device is only
+	// needed as a fallback, so picking one may fail without failing the
+	// request. A device is chosen lazily at decrypt time if required.
+	dev, hasDev := s.pickDeviceOptional()
 
 	now := time.Now().UTC()
 	task := db.Task{
@@ -240,10 +241,13 @@ func (s *TaskService) Request(in TaskRequestInput) (db.Task, error) {
 		AppID:             in.AppID,
 		Status:            "queued",
 		AccountID:         acc.ID,
-		DeviceID:          dev.ID,
+		DeviceID:          deviceIDOptional(dev, hasDev),
 		Logs:              []string{"Task queued"},
 		CreatedAt:         now,
 		UpdatedAt:         now,
+	}
+	if !hasDev {
+		s.log(&task, "No online device; will decrypt locally if credential allows")
 	}
 	if err := s.db.CreateTask(task); err != nil {
 		return db.Task{}, err
@@ -320,6 +324,23 @@ func (s *TaskService) pickDevice() (db.Device, error) {
 	return candidates[rand.IntN(len(candidates))], nil
 }
 
+// pickDeviceOptional reports ok=false when no online device exists. Local
+// FairPlay decryption makes devices optional.
+func (s *TaskService) pickDeviceOptional() (db.Device, bool) {
+	dev, err := s.pickDevice()
+	if err != nil {
+		return db.Device{}, false
+	}
+	return dev, true
+}
+
+func deviceIDOptional(dev db.Device, ok bool) string {
+	if !ok {
+		return ""
+	}
+	return dev.ID
+}
+
 func (s *TaskService) run(id string) {
 	if _, loaded := s.running.LoadOrStore(id, struct{}{}); loaded {
 		return
@@ -358,7 +379,7 @@ func (s *TaskService) run(id string) {
 		}
 	}
 
-	s.log(&task, "Sending to unfaird")
+	s.log(&task, "Starting decryption")
 	task.Status = "decrypting"
 	task.UpdatedAt = time.Now().UTC()
 	_ = s.db.UpdateTask(task)
@@ -417,14 +438,23 @@ func (s *TaskService) download(task *db.Task) error {
 }
 
 func (s *TaskService) decrypt(task *db.Task) error {
-	device, err := s.db.GetDevice(task.DeviceID)
-	if err != nil {
-		return err
-	}
-
 	source := task.EncryptedPath
 	if source == "" {
 		return fmt.Errorf("encrypted ipa path missing")
+	}
+
+	// Prefer local FairPlay decryption; fall back to an unfaird device
+	// when the account has no credential or the transform helper is
+	// unavailable.
+	handled, err := s.decryptLocal(task)
+	if handled {
+		return err
+	}
+
+	device, err := s.deviceForTask(task)
+	if err != nil {
+		_ = s.db.UpdateTask(*task)
+		return err
 	}
 
 	client := unfaird.New(device.BaseURL(), &http.Client{Timeout: 2 * time.Hour})
@@ -469,6 +499,73 @@ func (s *TaskService) decrypt(task *db.Task) error {
 		return fmt.Errorf("decrypt ok but fetch output failed: %w", err)
 	}
 
+	s.finishDecrypt(task, local)
+	return nil
+}
+
+// decryptLocal attempts local FairPlay decryption. It reports handled=false
+// when preconditions are missing (no credential or transform helper) so the
+// caller can fall back to device-based decryption; once handled=true, err
+// reports success or failure.
+func (s *TaskService) decryptLocal(task *db.Task) (bool, error) {
+	if s.cfg.FairplayTransformBin == "" || s.cfg.FairplayTransformConst == "" {
+		return false, nil
+	}
+	credential, credErr := s.accounts.Credential(task.AccountID)
+	if credErr != nil {
+		s.log(task, "No FairPlay credential on account, using device")
+		taskLog.WithFields(map[string]any{
+			"task_id":    task.ID,
+			"account_id": task.AccountID,
+			"reason":     credErr.Error(),
+		}).Info("fairplay decrypt skipped: no credential")
+		return false, nil
+	}
+	transform, tErr := fairplay.NewBlockTransform(s.cfg.FairplayTransformBin, s.cfg.FairplayTransformConst)
+	if tErr != nil {
+		s.log(task, "FairPlay transform unavailable, using device")
+		taskLog.WithFields(map[string]any{
+			"task_id": task.ID,
+			"error":   tErr.Error(),
+		}).Warn("fairplay decrypt skipped: transform unavailable")
+		return false, nil
+	}
+	defer func() { _ = transform.Close() }()
+
+	s.log(task, "Decrypting locally with FairPlay credential")
+	taskLog.WithFields(map[string]any{
+		"task_id": task.ID,
+		"source":  task.EncryptedPath,
+	}).Info("local fairplay decrypt started")
+
+	output := filepath.Join(s.cfg.DecryptedDir, task.ID+".ipa")
+	_ = os.Remove(output)
+	pages, err := fairplay.DecryptIPA(task.EncryptedPath, output, credential, transform, func(line string) {
+		s.log(task, line)
+	})
+	task.UpdatedAt = time.Now().UTC()
+	if err != nil {
+		_ = os.Remove(output)
+		taskLog.WithFields(map[string]any{
+			"task_id": task.ID,
+			"error":   err.Error(),
+		}).Error("fairplay decrypt failed")
+		_ = s.db.UpdateTask(*task)
+		return true, fmt.Errorf("fairplay decrypt: %w", err)
+	}
+
+	taskLog.WithFields(map[string]any{
+		"task_id": task.ID,
+		"path":    output,
+		"pages":   pages,
+	}).Info("fairplay decrypt succeeded")
+	s.log(task, fmt.Sprintf("FairPlay decrypt complete (%d pages)", pages))
+	s.finishDecrypt(task, output)
+	return true, nil
+}
+
+// finishDecrypt records the decrypted output and removes the encrypted IPA.
+func (s *TaskService) finishDecrypt(task *db.Task, local string) {
 	if st, err := os.Stat(local); err == nil {
 		task.SizeBytes = st.Size()
 	}
@@ -483,7 +580,23 @@ func (s *TaskService) decrypt(task *db.Task) error {
 	}
 	_ = s.db.UpdateTask(*task)
 	taskLog.WithFields(map[string]any{"task_id": task.ID, "path": local}).Info("decrypt succeeded")
-	return nil
+}
+
+// deviceForTask resolves the unfaird device to use: the recorded one if
+// still online, otherwise any online device.
+func (s *TaskService) deviceForTask(task *db.Task) (db.Device, error) {
+	if task.DeviceID != "" {
+		if dev, err := s.db.GetDevice(task.DeviceID); err == nil && dev.Status == "online" {
+			return dev, nil
+		}
+	}
+	dev, ok := s.pickDeviceOptional()
+	if !ok {
+		_ = s.db.UpdateTask(*task)
+		return db.Device{}, fmt.Errorf("decrypt failed: no FairPlay credential fallback available and no online device")
+	}
+	task.DeviceID = dev.ID
+	return dev, nil
 }
 
 func (s *TaskService) findReusableCompleted(bundleID, region, externalVersionID, displayVersion string) (db.Task, bool) {
@@ -517,10 +630,7 @@ func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput) (db.Task
 	if err != nil {
 		return db.Task{}, err
 	}
-	dev, err := s.pickDevice()
-	if err != nil {
-		return db.Task{}, err
-	}
+	dev, hasDev := s.pickDeviceOptional()
 
 	now := time.Now().UTC()
 	failed.Status = "queued"
@@ -530,7 +640,7 @@ func (s *TaskService) prepareRetry(failed db.Task, in TaskRequestInput) (db.Task
 	failed.IconURL = strings.TrimSpace(in.IconURL)
 	failed.AppID = in.AppID
 	failed.AccountID = acc.ID
-	failed.DeviceID = dev.ID
+	failed.DeviceID = deviceIDOptional(dev, hasDev)
 	failed.OutputPath = ""
 	failed.UpdatedAt = now
 	s.log(&failed, "Retry queued (encrypted IPA on disk)")

@@ -33,6 +33,8 @@
           <td class="col-email">{{ a.email }}</td>
           <td class="col-status">
             <span class="badge" :class="statusClass(a.status)">{{ accountStatus(a.status) }}</span>
+            <span v-if="a.has_credential" class="badge cred-badge" :title="t('accounts.credentialSet')">cred</span>
+            <span v-else class="badge cred-badge missing" :title="t('accounts.credentialMissing')">cred</span>
           </td>
           <td class="col-log">
             <span v-if="a.last_error" class="log-error" :title="a.last_error">{{ a.last_error }}</span>
@@ -42,6 +44,8 @@
             <div class="row-actions">
               <button type="button" class="action-btn" :disabled="busy" @click="startLogin(a)">{{ t('common.login') }}</button>
               <button type="button" class="action-btn" :disabled="busy" @click="refresh(a)">{{ t('accounts.verify') }}</button>
+              <button type="button" class="action-btn" :disabled="busy" @click="pickCredential(a)">{{ t('accounts.credential') }}</button>
+              <button type="button" class="action-btn danger" :disabled="busy || !a.has_credential" @click="clearCred(a)">{{ t('accounts.credentialClear') }}</button>
               <button type="button" class="action-btn danger" :disabled="busy" @click="revoke(a)">{{ t('common.revoke') }}</button>
               <button type="button" class="action-btn danger" :disabled="busy" @click="remove(a)">{{ t('common.delete') }}</button>
             </div>
@@ -95,6 +99,7 @@
       <p v-if="twoFA.error" class="error">{{ twoFA.error }}</p>
     </div>
   </div>
+  <input ref="credInput" type="file" accept=".bin,.dat,application/octet-stream" hidden @change="uploadCred" />
 </template>
 
 <script setup>
@@ -125,6 +130,41 @@ const twoFA = reactive({
   code: '',
   error: '',
 })
+const credInput = ref(null)
+const credAccountId = ref('')
+
+function pickCredential(a) {
+  credAccountId.value = a.id
+  credInput.value.value = ''
+  credInput.value.click()
+}
+
+async function uploadCred(event) {
+  const file = event.target.files?.[0]
+  const accountId = credAccountId.value
+  if (!file || !accountId) return
+  busy.value = true
+  error.value = ''
+  try {
+    await adminApi.uploadCredential(accountId, file)
+    await load()
+  } catch (e) {
+    error.value = e.message
+  } finally {
+    busy.value = false
+  }
+}
+
+async function clearCred(a) {
+  if (!confirm(t('accounts.credentialClearConfirm', { email: a.email }))) return
+  busy.value = true
+  try {
+    await adminApi.clearCredential(a.id)
+    await load()
+  } finally {
+    busy.value = false
+  }
+}
 
 function accountStatus(status) {
   return t(`accounts.status.${status}`) || status
@@ -286,7 +326,7 @@ onMounted(load)
 .accounts-table {
   table-layout: fixed;
   width: 100%;
-  min-width: 860px;
+  min-width: 1000px;
 }
 .accounts-table th,
 .accounts-table td {
@@ -303,7 +343,7 @@ onMounted(load)
 }
 .accounts-table th:nth-child(3),
 .accounts-table td:nth-child(3) {
-  width: 32%;
+  width: 24%;
   word-break: break-word;
 }
 .accounts-table th:nth-child(4),
@@ -317,7 +357,7 @@ onMounted(load)
 }
 .accounts-table th:nth-child(6),
 .accounts-table td:nth-child(6) {
-  width: 28%;
+  width: 36%;
 }
 .col-label {
   font-weight: 500;
@@ -344,6 +384,14 @@ onMounted(load)
   border: 1px dashed var(--line);
   text-transform: lowercase;
 }
+.badge.cred-badge {
+  margin-left: 0.3rem;
+  background: var(--surface-3);
+  color: var(--text-2);
+}
+.badge.cred-badge.missing {
+  opacity: 0.4;
+}
 .log-error {
   color: var(--red);
   font-size: 0.76rem;
@@ -357,27 +405,31 @@ onMounted(load)
 }
 .row-actions {
   display: flex;
-  flex-wrap: wrap;
-  gap: 0.2rem 0.45rem;
+  flex-wrap: nowrap;
+  gap: 0.3rem;
   justify-content: center;
 }
 .action-btn {
-  padding: 0.12rem 0.2rem;
-  border: 0;
-  background: transparent;
+  padding: 0.22rem 0.5rem;
+  border: 1px solid var(--line-2);
+  background: var(--surface-2);
   color: var(--text-2);
   font-size: 0.72rem;
   line-height: 1.25;
   cursor: pointer;
-  border-radius: 4px;
+  border-radius: 5px;
   white-space: nowrap;
+  flex-shrink: 0;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
 }
 .action-btn:hover:not(:disabled) {
   color: var(--text);
   background: var(--surface-3);
+  border-color: #3a3a42;
 }
 .action-btn.danger {
   color: var(--red);
+  border-color: #4a2020;
 }
 .action-btn.danger:hover:not(:disabled) {
   background: #2a1414;

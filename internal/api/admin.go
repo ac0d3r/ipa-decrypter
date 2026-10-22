@@ -1,6 +1,9 @@
 package api
 
 import (
+	"bytes"
+	"encoding/hex"
+	"io"
 	"net/http"
 
 	"github.com/ac0d3r/ipa-decrypter/internal/services"
@@ -14,6 +17,8 @@ func (s *Server) registerAdminRoutes(admin *gin.RouterGroup) {
 	admin.POST("/accounts/:id/login", s.handleLoginAccount)
 	admin.POST("/accounts/:id/refresh", s.handleRefreshAccount)
 	admin.POST("/accounts/:id/revoke", s.handleRevokeAccount)
+	admin.POST("/accounts/:id/credential", s.handleUploadCredential)
+	admin.DELETE("/accounts/:id/credential", s.handleClearCredential)
 	admin.DELETE("/accounts/:id", s.handleDeleteAccount)
 
 	admin.GET("/devices", s.handleListDevices)
@@ -113,6 +118,74 @@ func (s *Server) handleDeleteAccount(c *gin.Context) {
 		return
 	}
 	c.Status(http.StatusNoContent)
+}
+
+// handleUploadCredential stores a 16-byte FairPlay credential.bin for the
+// account. Accepts a multipart file field ("credential"/"file"), a raw
+// 16-byte body, or a 32-char hex body.
+func (s *Server) handleUploadCredential(c *gin.Context) {
+	var (
+		data []byte
+		err  error
+	)
+	if file, fhErr := c.FormFile("credential"); fhErr == nil {
+		fh, err := file.Open()
+		if err != nil {
+			writeErr(c, err)
+			return
+		}
+		defer fh.Close()
+		data, err = io.ReadAll(io.LimitReader(fh, 4096))
+		if err != nil {
+			writeErr(c, err)
+			return
+		}
+	} else if file, fhErr := c.FormFile("file"); fhErr == nil {
+		fh, err := file.Open()
+		if err != nil {
+			writeErr(c, err)
+			return
+		}
+		defer fh.Close()
+		data, err = io.ReadAll(io.LimitReader(fh, 4096))
+		if err != nil {
+			writeErr(c, err)
+			return
+		}
+	} else {
+		data, err = io.ReadAll(io.LimitReader(c.Request.Body, 4096))
+		if err != nil {
+			writeErr(c, err)
+			return
+		}
+	}
+	data = normalizeCredential(data)
+	item, err := s.Accounts.SetCredential(c.Param("id"), data)
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
+}
+
+// normalizeCredential accepts raw 16 bytes or a 32-char hex string.
+func normalizeCredential(data []byte) []byte {
+	trimmed := bytes.TrimSpace(data)
+	if len(trimmed) == 32 {
+		if decoded, err := hex.DecodeString(string(trimmed)); err == nil {
+			return decoded
+		}
+	}
+	return trimmed
+}
+
+func (s *Server) handleClearCredential(c *gin.Context) {
+	item, err := s.Accounts.ClearCredential(c.Param("id"))
+	if err != nil {
+		writeErr(c, err)
+		return
+	}
+	c.JSON(http.StatusOK, item)
 }
 
 func (s *Server) handleListDevices(c *gin.Context) {
