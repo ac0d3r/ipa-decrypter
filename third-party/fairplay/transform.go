@@ -9,6 +9,7 @@ import (
 	"bufio"
 	"bytes"
 	"encoding/hex"
+	"errors"
 	"fmt"
 	"io"
 	"os"
@@ -78,7 +79,10 @@ func (b *BlockTransform) Close() error {
 		return err
 	case <-time.After(30 * time.Second):
 		_ = b.cmd.Process.Kill()
-		<-done
+		waitErr := <-done
+		if waitErr != nil {
+			return fmt.Errorf("transform did not exit within 30s: %w", waitErr)
+		}
 		return fmt.Errorf("transform did not exit within 30s")
 	}
 }
@@ -94,12 +98,12 @@ func (b *BlockTransform) Run(source, work []byte) ([]byte, error) {
 	if b.cmd == nil || b.cmd.Process == nil {
 		return nil, fmt.Errorf("block transform pipes unavailable")
 	}
-	if _, err := fmt.Fprintf(b.stdin, "%x %x %x\n", source, work, constant[:]); err != nil {
+	if _, err := fmt.Fprintf(b.stdin, "%x %x %x\n", source, work, constant); err != nil {
 		return nil, fmt.Errorf("write transform request: %w (stderr: %s)", err, b.stderr.String())
 	}
 	line, err := b.stdout.ReadString('\n')
 	if err != nil {
-		if err == io.EOF {
+		if errors.Is(err, io.EOF) {
 			return nil, fmt.Errorf("block transform exited early: %s", strings.TrimSpace(b.stderr.String()))
 		}
 		return nil, fmt.Errorf("read transform output: %w", err)

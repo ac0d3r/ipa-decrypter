@@ -42,7 +42,7 @@ func DecryptIPA(ipaPath, outputPath string, credential []byte, block *BlockTrans
 	if err != nil {
 		return 0, fmt.Errorf("open IPA: %w", err)
 	}
-	defer reader.Close()
+	defer func() { _ = reader.Close() }()
 
 	names := make(map[string]bool, len(reader.File))
 	for _, f := range reader.File {
@@ -137,7 +137,7 @@ func DecryptIPA(ipaPath, outputPath string, credential []byte, block *BlockTrans
 }
 
 // rsplit splits s at the last occurrence of sep (Python's rsplit(sep, 1)).
-func rsplit(s, sep string) (string, string, bool) {
+func rsplit(s, sep string) (before, after string, ok bool) {
 	i := strings.LastIndex(s, sep)
 	if i < 0 {
 		return "", "", false
@@ -227,7 +227,7 @@ func readZipMember(r *zip.Reader, name string) ([]byte, error) {
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", name, err)
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	data, err := io.ReadAll(f)
 	if err != nil {
 		return nil, fmt.Errorf("read %s: %w", name, err)
@@ -265,8 +265,6 @@ func writeZip(r *zip.Reader, replacements map[string][]byte, outputPath string) 
 		// Recompress every member; sizes and CRC are recomputed.
 		header.CompressedSize64 = 0
 		header.UncompressedSize64 = 0
-		header.CompressedSize = 0
-		header.UncompressedSize = 0
 		header.CRC32 = 0
 		entry, err := writer.CreateHeader(&header)
 		if err != nil {

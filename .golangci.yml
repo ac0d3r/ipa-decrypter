@@ -27,7 +27,7 @@ linters:
         hugeParam:
           sizeThreshold: 512
     gosec:
-      # G204/G304: running ipatool and reading/writing user-specified paths is the tool's purpose.
+      # G204/G304/G702/G703: running helpers and reading/writing user-specified paths is the tool's purpose.
       # G404: picking a random candidate account/device is not cryptographic.
       # G124: session cookies must also work over plain HTTP on LAN deployments.
       excludes:
@@ -35,6 +35,8 @@ linters:
         - G304
         - G404
         - G124
+        - G702
+        - G703
     errcheck:
       exclude-functions:
         - fmt.Fprint

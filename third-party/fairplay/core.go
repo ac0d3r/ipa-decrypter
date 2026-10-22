@@ -8,10 +8,11 @@ import (
 	"bytes"
 	"crypto/aes"
 	"crypto/cipher"
-	"crypto/md5"
+	"crypto/md5" //nolint:gosec // G501: FairPlay SINF IV derivation requires MD5
 	"encoding/binary"
 	"encoding/hex"
 	"fmt"
+	"math"
 )
 
 const (
@@ -102,6 +103,9 @@ func Arm64EncryptionInfo(data []byte) (MachoInfo, error) {
 			off := binary.BigEndian.Uint64(entry[8:16])
 			size := binary.BigEndian.Uint64(entry[16:24])
 			if cpu == arm64 {
+				if off > math.MaxInt || size > math.MaxInt {
+					return MachoInfo{}, fmt.Errorf("arm64 slice offset/size exceeds addressable range")
+				}
 				arm[0], arm[1] = int(off), int(size)
 				found++
 			}
@@ -197,7 +201,7 @@ func sinfChildren(data []byte, start, end int) ([]sinfAtom, error) {
 	return out, nil
 }
 
-func sinfField(sinf []byte, wanted []byte) ([]byte, error) {
+func sinfField(sinf, wanted []byte) ([]byte, error) {
 	roots, err := sinfChildren(sinf, 0, len(sinf))
 	if err != nil {
 		return nil, err
@@ -234,7 +238,7 @@ func sinfField(sinf []byte, wanted []byte) ([]byte, error) {
 	return matched[0].payload, nil
 }
 
-func sinfAtomByName(sinf []byte, name []byte) ([]byte, error) {
+func sinfAtomByName(sinf, name []byte) ([]byte, error) {
 	tag := bytes.Index(sinf, name)
 	if tag < 4 {
 		return nil, fmt.Errorf("missing %q atom", name)
@@ -276,21 +280,21 @@ func DeriveWork16(credential, sinf []byte) ([]byte, error) {
 	if len(credential) != 16 || len(iviv) != 16 {
 		return nil, fmt.Errorf("invalid SINF priv-record dimensions")
 	}
-	iv := md5.Sum(append(append([]byte{}, name...), iviv...))
+	iv := md5.Sum(append(append([]byte{}, name...), iviv...)) //nolint:gosec // G401: FairPlay SINF IV derivation requires MD5
 	key := xorBytes(credential, bytes.Repeat([]byte("0"), 16))
 	blockCipher, err := aes.NewCipher(key)
 	if err != nil {
 		return nil, err
 	}
 	mode := cipher.NewCBCDecrypter(blockCipher, iv[:])
-	clear := make([]byte, len(rawPriv))
-	mode.CryptBlocks(clear, rawPriv)
-	if !bytes.Equal(clear[:4], []byte("itun")) ||
-		!bytes.Equal(clear[20:24], []byte("key ")) ||
-		!bytes.Equal(clear[44:48], []byte("iviv")) {
+	plain := make([]byte, len(rawPriv))
+	mode.CryptBlocks(plain, rawPriv)
+	if !bytes.Equal(plain[:4], []byte("itun")) ||
+		!bytes.Equal(plain[20:24], []byte("key ")) ||
+		!bytes.Equal(plain[44:48], []byte("iviv")) {
 		return nil, fmt.Errorf("credential does not decode this SINF priv record")
 	}
-	return xorBytes(clear[24:40], workMask), nil
+	return xorBytes(plain[24:40], workMask), nil
 }
 
 // Arm64SUPFRecordOffset returns the byte offset of the arm64 page records
@@ -337,9 +341,11 @@ func high8FromContextWord(word uint64) []byte {
 
 	fold := func(value, mask byte) byte {
 		mixed := uint32(value) ^ uint32(mask)
+		//nolint:gosec // G115: FairPlay high8 folding uses intentional 8-bit wrap
 		return byte(mixed - (0x5A & (mixed << 1)) + 0x2D)
 	}
 	q := b[1] ^ 0xA1
+	//nolint:gosec // G115: FairPlay high8 folding uses intentional 8-bit wrap
 	seventh := byte(int32(q) - 2*int32((b[1]&0x52)^q) + 0x2D)
 	return []byte{
 		fold(b[7], 0x3E) ^ 0x3E,
@@ -380,7 +386,7 @@ func mixRound(before []uint16, selectors []byte) []uint16 {
 		low := ((0xCB61 - high*high) ^ square) & 0xFFFF
 		top := (square >> 16) & 0xFFFF
 		coded := top ^ 0x6B2
-		out[pair*2] = uint16(low ^ 0x18FB)
+		out[pair*2] = uint16((low ^ 0x18FB) & 0xFFFF)
 		out[pair*2+1] = uint16((coded - 2*((coded&0x58FF)^(top&0x4004)) + 0x18FB) & 0xFFFF)
 	}
 	return out
@@ -460,13 +466,13 @@ func DerivePageKey(wrapped []byte, absoluteIndex uint32, work []byte, block *Blo
 
 // DecryptBinary decrypts every encrypted arm64 page of one binary and
 // clears cryptid. It returns the patched binary and the page count.
-func DecryptBinary(source, sinf, supf, credential []byte, block *BlockTransform) ([]byte, int, error) {
+func DecryptBinary(source, sinf, supf, credential []byte, block *BlockTransform) (result []byte, pages int, err error) {
 	info, err := Arm64EncryptionInfo(source)
 	if err != nil {
 		return nil, 0, err
 	}
-	pageCount := info.Cryptsize / pageSize
-	recordStart, err := Arm64SUPFRecordOffset(supf, pageCount)
+	pages = info.Cryptsize / pageSize
+	recordStart, err := Arm64SUPFRecordOffset(supf, pages)
 	if err != nil {
 		return nil, 0, err
 	}
@@ -474,15 +480,20 @@ func DecryptBinary(source, sinf, supf, credential []byte, block *BlockTransform)
 	if err != nil {
 		return nil, 0, err
 	}
-	result := make([]byte, len(source))
+	result = make([]byte, len(source))
 	copy(result, source)
-	for localPage := 0; localPage < pageCount; localPage++ {
+	basePage := (info.Base + info.Cryptoff) / pageSize
+	for localPage := 0; localPage < pages; localPage++ {
 		start := recordStart + 32*localPage
 		record := supf[start : start+32]
 		if len(record) != 32 {
 			return nil, 0, fmt.Errorf("truncated SUPF page record")
 		}
-		absoluteIndex := uint32((info.Base+info.Cryptoff)/pageSize) + uint32(localPage)
+		pageIndex := basePage + localPage
+		if pageIndex < 0 || pageIndex > math.MaxUint32 {
+			return nil, 0, fmt.Errorf("page index exceeds uint32 range")
+		}
+		absoluteIndex := uint32(pageIndex) //nolint:gosec // G115: pageIndex bounded above
 		key, err := DerivePageKey(record[:16], absoluteIndex, work, block)
 		if err != nil {
 			return nil, 0, err
@@ -499,5 +510,5 @@ func DecryptBinary(source, sinf, supf, credential []byte, block *BlockTransform)
 		copy(result[pageStart:pageStart+pageSize], page)
 	}
 	binary.LittleEndian.PutUint32(result[info.CryptidOffset:], 0)
-	return result, pageCount, nil
+	return result, pages, nil
 }
