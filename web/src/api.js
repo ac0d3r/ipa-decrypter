@@ -19,9 +19,13 @@ export function setUnauthorizedHandler(fn) {
 
 async function request(path, options = {}) {
   const { skipAuthRedirect, ...fetchOpts } = options
+  const headers = { 'Content-Type': 'application/json', ...(fetchOpts.headers || {}) }
+  if (fetchOpts.body instanceof FormData) {
+    delete headers['Content-Type'] // let the browser set the multipart boundary
+  }
   const res = await fetch(BASE + path, {
     credentials: 'same-origin',
-    headers: { 'Content-Type': 'application/json', ...(fetchOpts.headers || {}) },
+    headers,
     ...fetchOpts,
   })
   if (res.status === 204) return null
@@ -97,6 +101,12 @@ export const adminApi = {
   loginAccount: (id, auth_code = '') => request(`/api/v1/admin/accounts/${id}/login`, { method: 'POST', body: JSON.stringify({ auth_code }) }),
   refreshAccount: (id) => request(`/api/v1/admin/accounts/${id}/refresh`, { method: 'POST' }),
   revokeAccount: (id) => request(`/api/v1/admin/accounts/${id}/revoke`, { method: 'POST' }),
+  uploadCredential: (id, file) => {
+    const form = new FormData()
+    form.append('credential', file)
+    return request(`/api/v1/admin/accounts/${id}/credential`, { method: 'POST', body: form })
+  },
+  clearCredential: (id) => request(`/api/v1/admin/accounts/${id}/credential`, { method: 'DELETE' }),
   deleteAccount: (id) => request(`/api/v1/admin/accounts/${id}`, { method: 'DELETE' }),
 
   listDevices: () => request('/api/v1/admin/devices'),

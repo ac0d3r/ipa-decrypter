@@ -6,21 +6,25 @@ import (
 )
 
 type Account struct {
-	ID         string    `gorm:"primaryKey" json:"id"`
-	Email      string    `json:"email"`
-	Label      string    `json:"label"`
-	Region     string    `json:"region"` // storefront country code, e.g. us/jp/cn
-	StoreFront string    `json:"store_front,omitempty"`
-	HomeDir    string    `json:"home_dir"`
-	Status     string    `json:"status"` // unknown|logged_in|logged_out|needs_2fa|error
-	LastError  string    `json:"last_error,omitempty"`
-	CreatedAt  time.Time `json:"created_at"`
-	UpdatedAt  time.Time `json:"updated_at"`
+	ID         string `gorm:"primaryKey" json:"id"`
+	Email      string `json:"email"`
+	Label      string `json:"label"`
+	Region     string `json:"region"` // storefront country code, e.g. us/jp/cn
+	StoreFront string `json:"store_front,omitempty"`
+	HomeDir    string `json:"home_dir"`
+	Status     string `json:"status"` // unknown|logged_in|logged_out|needs_2fa|error
+	LastError  string `json:"last_error,omitempty"`
+	// HasCredential reports whether a FairPlay credential.bin has been
+	// uploaded for this account. Computed, never persisted directly.
+	HasCredential bool      `gorm:"-" json:"has_credential"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
 type AccountRow struct {
 	Account
-	PasswordEnc string `gorm:"column:password_enc" json:"-"`
+	PasswordEnc   string `gorm:"column:password_enc" json:"-"`
+	CredentialEnc string `gorm:"column:credential_enc" json:"-"` // encrypted 16-byte FairPlay credential
 }
 
 func (AccountRow) TableName() string { return "accounts" }

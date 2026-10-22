@@ -67,14 +67,78 @@ func (s *AccountService) List() ([]db.Account, error) {
 	}
 	out := make([]db.Account, 0, len(rows))
 	for i := range rows {
-		out = append(out, rows[i].Account)
+		out = append(out, accountView(&rows[i]))
 	}
 	return out, nil
 }
 
 func (s *AccountService) Get(id string) (db.Account, error) {
 	row, err := s.db.GetAccount(id)
-	return row.Account, err
+	if err != nil {
+		return db.Account{}, err
+	}
+	return accountView(&row), nil
+}
+
+// accountView strips persisted secrets and reports derived state.
+func accountView(row *db.AccountRow) db.Account {
+	acc := row.Account
+	acc.HasCredential = row.CredentialEnc != ""
+	return acc
+}
+
+// SetCredential stores the account's 16-byte FairPlay credential
+// (credential.bin) encrypted with the keychain passphrase.
+func (s *AccountService) SetCredential(id string, credential []byte) (db.Account, error) {
+	if len(credential) != 16 {
+		return db.Account{}, fmt.Errorf("credential must contain exactly 16 bytes")
+	}
+	row, err := s.db.GetAccount(id)
+	if err != nil {
+		return db.Account{}, err
+	}
+	enc, err := util.Encrypt(s.cfg.KeychainPassphrase, string(credential))
+	if err != nil {
+		return db.Account{}, err
+	}
+	row.CredentialEnc = enc
+	row.UpdatedAt = time.Now().UTC()
+	if err := s.db.UpdateAccount(row); err != nil {
+		return db.Account{}, err
+	}
+	accountLog.WithField("account_id", id).Info("account credential uploaded")
+	return accountView(&row), nil
+}
+
+// ClearCredential removes the account's stored FairPlay credential.
+func (s *AccountService) ClearCredential(id string) (db.Account, error) {
+	row, err := s.db.GetAccount(id)
+	if err != nil {
+		return db.Account{}, err
+	}
+	row.CredentialEnc = ""
+	row.UpdatedAt = time.Now().UTC()
+	if err := s.db.UpdateAccount(row); err != nil {
+		return db.Account{}, err
+	}
+	accountLog.WithField("account_id", id).Info("account credential removed")
+	return accountView(&row), nil
+}
+
+// Credential returns the decrypted 16-byte FairPlay credential.
+func (s *AccountService) Credential(id string) ([]byte, error) {
+	row, err := s.db.GetAccount(id)
+	if err != nil {
+		return nil, err
+	}
+	if row.CredentialEnc == "" {
+		return nil, fmt.Errorf("account has no credential")
+	}
+	plain, err := util.Decrypt(s.cfg.KeychainPassphrase, row.CredentialEnc)
+	if err != nil {
+		return nil, err
+	}
+	return []byte(plain), nil
 }
 
 func (s *AccountService) Create(in AccountCreateInput) (db.Account, error) {
@@ -130,7 +194,7 @@ func (s *AccountService) Create(in AccountCreateInput) (db.Account, error) {
 	if in.LoginNow {
 		return s.Login(id, "")
 	}
-	return row.Account, nil
+	return accountView(&row), nil
 }
 
 func (s *AccountService) Login(id, authCode string) (db.Account, error) {
@@ -168,9 +232,9 @@ func (s *AccountService) Login(id, authCode string) (db.Account, error) {
 			"storefront": row.StoreFront,
 		}).Info("login succeeded")
 		if err := s.db.UpdateAccount(row); err != nil {
-			return row.Account, err
+			return accountView(&row), err
 		}
-		return row.Account, nil
+		return accountView(&row), nil
 	}
 
 	if needs2FA {
@@ -194,7 +258,7 @@ func (s *AccountService) Login(id, authCode string) (db.Account, error) {
 		}).Error("login failed")
 	}
 	_ = s.db.UpdateAccount(row)
-	return row.Account, &AccountLoginError{Account: row.Account, Needs2FA: needs2FA, Message: msg}
+	return accountView(&row), &AccountLoginError{Account: accountView(&row), Needs2FA: needs2FA, Message: msg}
 }
 
 func looksLikeNeeds2FA(msg string) bool {
@@ -236,7 +300,7 @@ func (s *AccountService) Refresh(id string) (db.Account, error) {
 		accountLog.WithFields(map[string]any{"account_id": id, "region": row.Region}).Info("session refreshed")
 	}
 	_ = s.db.UpdateAccount(row)
-	return row.Account, nil
+	return accountView(&row), nil
 }
 
 func (s *AccountService) applyStoreFront(row *db.AccountRow) {
@@ -274,7 +338,7 @@ func (s *AccountService) Revoke(id string) (db.Account, error) {
 	}
 	accountLog.WithField("account_id", id).Info("session revoked")
 	_ = s.db.UpdateAccount(row)
-	return row.Account, nil
+	return accountView(&row), nil
 }
 
 func (s *AccountService) Delete(id string) error {

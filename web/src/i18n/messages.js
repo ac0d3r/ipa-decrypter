@@ -132,6 +132,11 @@ export const messages = {
       twoFACode: '6 位验证码',
       confirmLogin: '确认登录',
       deleteConfirm: '删除账号 {email}？',
+      credential: '凭据',
+      credentialSet: '已上传 FairPlay credential.bin',
+      credentialMissing: '未上传 FairPlay credential.bin',
+      credentialClear: '删凭据',
+      credentialClearConfirm: '删除账号 {email} 的 FairPlay credential？',
       status: {
         logged_in: '已登录',
         logged_out: '未登录',
@@ -308,6 +313,11 @@ export const messages = {
       twoFACode: '6-digit code',
       confirmLogin: 'Confirm login',
       deleteConfirm: 'Delete account {email}?',
+      credential: 'Credential',
+      credentialSet: 'FairPlay credential.bin uploaded',
+      credentialMissing: 'No FairPlay credential.bin uploaded',
+      credentialClear: 'Remove credential',
+      credentialClearConfirm: 'Remove the FairPlay credential of account {email}?',
       status: {
         logged_in: 'Logged in',
         logged_out: 'Logged out',
