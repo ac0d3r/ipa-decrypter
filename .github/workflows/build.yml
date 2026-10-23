@@ -92,6 +92,7 @@ jobs:
         with:
           context: .
           platforms: ${{ matrix.platform }}
+          pull: true
           tags: ${{ needs.resolve.outputs.push == 'true' && needs.resolve.outputs.image || '' }}
           outputs: ${{ needs.resolve.outputs.push == 'true' && 'type=image,push-by-digest=true,name-canonical=true,push=true' || '' }}
           build-args: |

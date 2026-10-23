@@ -1,6 +1,6 @@
 module github.com/ac0d3r/ipa-decrypter
 
-go 1.27.0
+go 1.27.3
 
 require (
 	github.com/dvsekhvalnov/jose2go v1.6.0
