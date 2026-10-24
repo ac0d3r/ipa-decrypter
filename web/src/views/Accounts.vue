@@ -5,7 +5,6 @@
       <IconButton icon="refresh" :title="t('common.refresh')" :busy="busy" @click="load" />
     </PanelHeader>
 
-    <div class="table-wrap">
     <table class="table accounts-table">
       <thead>
         <tr>
@@ -13,13 +12,14 @@
           <th>{{ t('accounts.colRegion') }}</th>
           <th>{{ t('accounts.colEmail') }}</th>
           <th>{{ t('accounts.colStatus') }}</th>
+          <th>{{ t('accounts.colCredential') }}</th>
           <th>{{ t('accounts.colLog') }}</th>
           <th>{{ t('accounts.colActions') }}</th>
         </tr>
       </thead>
       <tbody>
         <tr v-if="!items.length">
-          <td colspan="6" class="muted">{{ t('common.noData') }}</td>
+          <td colspan="7" class="muted">{{ t('common.noData') }}</td>
         </tr>
         <tr v-for="a in items" :key="a.id">
           <td class="col-label">{{ displayLabel(a) }}</td>
@@ -33,27 +33,48 @@
           <td class="col-email">{{ a.email }}</td>
           <td class="col-status">
             <span class="badge" :class="statusClass(a.status)">{{ accountStatus(a.status) }}</span>
-            <span v-if="a.has_credential" class="badge cred-badge" :title="t('accounts.credentialSet')">cred</span>
-            <span v-else class="badge cred-badge missing" :title="t('accounts.credentialMissing')">cred</span>
+          </td>
+          <td class="col-credential">
+            <div class="cred-cell">
+              <span
+                class="badge"
+                :class="a.has_credential ? 'ok' : 'cred-missing'"
+                :title="a.has_credential ? t('accounts.credentialHintSet') : t('accounts.credentialHintMissing')"
+              >
+                {{ a.has_credential ? t('accounts.credentialSet') : t('accounts.credentialMissing') }}
+              </span>
+              <div class="table-actions">
+                <IconButton
+                  icon="key"
+                  :title="t('accounts.credentialUpload')"
+                  :disabled="busy"
+                  @click="pickCredential(a)"
+                />
+                <IconButton
+                  icon="trash"
+                  variant="danger"
+                  :title="t('accounts.credentialClear')"
+                  :disabled="busy || !a.has_credential"
+                  @click="clearCred(a)"
+                />
+              </div>
+            </div>
           </td>
           <td class="col-log">
             <span v-if="a.last_error" class="log-error" :title="a.last_error">{{ a.last_error }}</span>
             <span v-else class="muted">—</span>
           </td>
           <td class="col-actions">
-            <div class="row-actions">
-              <button type="button" class="action-btn" :disabled="busy" @click="startLogin(a)">{{ t('common.login') }}</button>
-              <button type="button" class="action-btn" :disabled="busy" @click="refresh(a)">{{ t('accounts.verify') }}</button>
-              <button type="button" class="action-btn" :disabled="busy" @click="pickCredential(a)">{{ t('accounts.credential') }}</button>
-              <button type="button" class="action-btn danger" :disabled="busy || !a.has_credential" @click="clearCred(a)">{{ t('accounts.credentialClear') }}</button>
-              <button type="button" class="action-btn danger" :disabled="busy" @click="revoke(a)">{{ t('common.revoke') }}</button>
-              <button type="button" class="action-btn danger" :disabled="busy" @click="remove(a)">{{ t('common.delete') }}</button>
+            <div class="table-actions">
+              <IconButton icon="login" :title="t('common.login')" :disabled="busy" @click="startLogin(a)" />
+              <IconButton icon="check" :title="t('accounts.verify')" :disabled="busy" @click="refresh(a)" />
+              <IconButton icon="logout" variant="danger" :title="t('common.revoke')" :disabled="busy" @click="revoke(a)" />
+              <IconButton icon="trash" variant="danger" :title="t('common.delete')" :disabled="busy" @click="remove(a)" />
             </div>
           </td>
         </tr>
       </tbody>
     </table>
-    </div>
     <p v-if="error" class="error">{{ error }}</p>
   </section>
 
@@ -320,44 +341,45 @@ onMounted(load)
 </script>
 
 <style scoped>
-.table-wrap {
-  overflow-x: auto;
-}
 .accounts-table {
   table-layout: fixed;
   width: 100%;
-  min-width: 1000px;
 }
 .accounts-table th,
 .accounts-table td {
   text-align: center;
   vertical-align: middle;
+  padding: 0.5rem 0.3rem;
 }
 .accounts-table th:nth-child(1),
 .accounts-table td:nth-child(1) {
-  width: 8%;
+  width: 9%;
 }
 .accounts-table th:nth-child(2),
 .accounts-table td:nth-child(2) {
-  width: 8%;
+  width: 9%;
 }
 .accounts-table th:nth-child(3),
 .accounts-table td:nth-child(3) {
-  width: 24%;
+  width: 22%;
   word-break: break-word;
 }
 .accounts-table th:nth-child(4),
 .accounts-table td:nth-child(4) {
-  width: 14%;
+  width: 11%;
   white-space: nowrap;
 }
 .accounts-table th:nth-child(5),
 .accounts-table td:nth-child(5) {
-  width: 10%;
+  width: 18%;
 }
 .accounts-table th:nth-child(6),
 .accounts-table td:nth-child(6) {
-  width: 36%;
+  width: 14%;
+}
+.accounts-table th:nth-child(7),
+.accounts-table td:nth-child(7) {
+  width: 17%;
 }
 .col-label {
   font-weight: 500;
@@ -384,13 +406,19 @@ onMounted(load)
   border: 1px dashed var(--line);
   text-transform: lowercase;
 }
-.badge.cred-badge {
-  margin-left: 0.3rem;
-  background: var(--surface-3);
-  color: var(--text-2);
+.cred-cell {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.3rem;
 }
-.badge.cred-badge.missing {
-  opacity: 0.4;
+.badge.cred-missing {
+  opacity: 0.55;
+  color: var(--text-4);
+}
+.col-actions .table-actions,
+.cred-cell .table-actions {
+  justify-content: center;
 }
 .log-error {
   color: var(--red);
@@ -402,41 +430,6 @@ onMounted(load)
   line-clamp: 3;
   -webkit-box-orient: vertical;
   overflow: hidden;
-}
-.row-actions {
-  display: flex;
-  flex-wrap: nowrap;
-  gap: 0.3rem;
-  justify-content: center;
-}
-.action-btn {
-  padding: 0.22rem 0.5rem;
-  border: 1px solid var(--line-2);
-  background: var(--surface-2);
-  color: var(--text-2);
-  font-size: 0.72rem;
-  line-height: 1.25;
-  cursor: pointer;
-  border-radius: 5px;
-  white-space: nowrap;
-  flex-shrink: 0;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
-}
-.action-btn:hover:not(:disabled) {
-  color: var(--text);
-  background: var(--surface-3);
-  border-color: #3a3a42;
-}
-.action-btn.danger {
-  color: var(--red);
-  border-color: #4a2020;
-}
-.action-btn.danger:hover:not(:disabled) {
-  background: #2a1414;
-}
-.action-btn:disabled {
-  opacity: 0.45;
-  cursor: default;
 }
 .checkbox-row {
   grid-column: 1 / -1;

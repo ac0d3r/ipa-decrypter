@@ -24,7 +24,13 @@
           <button :class="{ active: mode === 'search' }" @click="mode = 'search'">{{ t('home.modeSearch') }}</button>
           <button :class="{ active: mode === 'bundle' }" @click="mode = 'bundle'">{{ t('home.modeBundle') }}</button>
         </div>
-        <RegionPicker v-model="region" :regions="regions" @change="onRegionChange" />
+        <RegionPicker
+          v-model="region"
+          :regions="regions"
+          :empty-label="t('home.noRegion')"
+          :suffix="t('home.platform')"
+          @change="onRegionChange"
+        />
       </div>
       <div class="search-box">
         <input
@@ -61,12 +67,12 @@
             <img v-if="g.items[0].icon_url" :src="g.items[0].icon_url" class="app-icon" alt="" />
             <div v-else class="app-icon placeholder"></div>
             <div class="app-info">
-              <div class="app-name">{{ g.items[0].app_name }}</div>
-              <div class="app-meta">
-                <span v-if="g.items[0].display_version">v{{ g.items[0].display_version }}</span>
-                <span v-if="g.items[0].size_bytes"> · {{ fmtSize(g.items[0].size_bytes) }}</span>
-                <span v-if="g.items[0].region" class="meta-region"> · <CountryFlag :code="g.items[0].region" /></span>
-              </div>
+            <div class="app-name">{{ g.items[0].app_name }}</div>
+            <div class="app-meta">
+              <span v-if="g.items[0].display_version">v{{ g.items[0].display_version }}</span>
+              <span v-if="g.items[0].size_bytes"> · {{ fmtSize(g.items[0].size_bytes) }}</span>
+              <span v-if="g.items[0].region" class="meta-region"> · <CountryFlag :code="g.items[0].region" /></span>
+            </div>
               <div class="app-bundle">{{ g.bundleId }}</div>
             </div>
             <div class="app-action">
@@ -233,6 +239,16 @@
         </div>
       </div>
     </div>
+
+    <footer class="site-footer">
+      <a href="https://github.com/ac0d3r/ipa-decrypter" target="_blank" rel="noopener noreferrer">
+        {{ t('home.footerGithub') }}
+      </a>
+      <span class="sep">·</span>
+      <a href="https://github.com/ac0d3r/ipa-decrypter/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
+        {{ t('home.footerLicense') }}
+      </a>
+    </footer>
   </div>
 </template>
 
@@ -257,7 +273,7 @@ async function requireLogin() {
 }
 
 const mode = ref('search')
-const region = ref('us')
+const region = ref('')
 const query = ref('')
 const regions = ref([])
 const results = ref([])
@@ -502,7 +518,11 @@ async function loadCachedForResults(apps) {
 async function loadRegions() {
   const d = await publicApi.regions()
   regions.value = d.regions || []
-  if (regions.value.length && !regions.value.find(r => r.code === region.value)) {
+  if (!regions.value.length) {
+    region.value = ''
+    return
+  }
+  if (!regions.value.find(r => r.code === region.value)) {
     region.value = regions.value[0].code
   }
 }
@@ -527,7 +547,7 @@ function onRegionChange() {
 
 async function runSearch() {
   const q = query.value.trim()
-  if (!q) return
+  if (!q || !region.value) return
   loading.value = true
   searched.value = true
   busy.value = true
@@ -911,4 +931,27 @@ h1 { font-size: 1.35rem; margin: 0; font-weight: 650; line-height: 1.15; }
   margin: 1.1rem 0 0.85rem;
 }
 .loading, .empty { text-align: center; padding: 2rem; color: var(--text-3); }
+.site-footer {
+  margin-top: 3rem;
+  padding: 1.25rem 0 0.5rem;
+  border-top: 1px solid var(--line);
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 0.35rem 0.15rem;
+  font-size: 0.72rem;
+  color: var(--text-3);
+  line-height: 1.5;
+}
+.site-footer a {
+  color: var(--text-2);
+  text-decoration: none;
+}
+.site-footer a:hover { color: var(--text); text-decoration: underline; }
+.site-footer .sep {
+  margin: 0 0.35rem;
+  color: var(--text-4);
+  user-select: none;
+}
 </style>
