@@ -102,5 +102,5 @@ nav a.router-link-active { background: var(--surface-2); color: var(--text); }
   font-size: 0.82rem;
   color: var(--text-2);
 }
-.admin-main { flex: 1; padding: 1.25rem; max-width: 960px; }
+.admin-main { flex: 1; min-width: 0; padding: 1.25rem; max-width: 1100px; }
 </style>

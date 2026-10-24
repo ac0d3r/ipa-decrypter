@@ -1,11 +1,17 @@
 <template>
-  <div ref="root" class="region-picker" :class="{ open }">
-    <button type="button" class="region-trigger" @click="toggle">
-      <CountryFlag :code="modelValue" lg />
-      <span class="region-code">{{ modelValue.toUpperCase() }}</span>
-      <span class="chevron" aria-hidden="true">▾</span>
-    </button>
-    <div v-if="open" class="region-menu">
+  <div ref="root" class="region-picker" :class="{ open, empty: !hasSelection }">
+    <div class="region-row">
+      <button type="button" class="region-trigger" :disabled="!options.length" @click="toggle">
+        <template v-if="hasSelection">
+          <CountryFlag :code="modelValue" lg />
+          <span class="region-code">{{ modelValue.toUpperCase() }}</span>
+        </template>
+        <span v-else class="region-placeholder">{{ emptyLabel }}</span>
+        <span v-if="options.length" class="chevron" aria-hidden="true">▾</span>
+      </button>
+      <span v-if="suffix" class="region-suffix">{{ suffix }}</span>
+    </div>
+    <div v-if="open && options.length" class="region-menu">
       <button
         v-for="r in options"
         :key="r.code"
@@ -26,8 +32,10 @@ import { computed, onMounted, onUnmounted, ref } from 'vue'
 import CountryFlag from './CountryFlag.vue'
 
 const props = defineProps({
-  modelValue: { type: String, required: true },
+  modelValue: { type: String, default: '' },
   regions: { type: Array, default: () => [] },
+  emptyLabel: { type: String, default: '—' },
+  suffix: { type: String, default: '' },
 })
 
 const emit = defineEmits(['update:modelValue', 'change'])
@@ -35,12 +43,11 @@ const emit = defineEmits(['update:modelValue', 'change'])
 const root = ref(null)
 const open = ref(false)
 
-const options = computed(() => {
-  if (props.regions.length) return props.regions
-  return [{ code: 'us', label: 'US' }]
-})
+const options = computed(() => props.regions || [])
+const hasSelection = computed(() => !!props.modelValue)
 
 function toggle() {
+  if (!options.value.length) return
   open.value = !open.value
 }
 
@@ -63,8 +70,13 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
 <style scoped>
 .region-picker {
   position: relative;
-  margin-left: auto;
   flex-shrink: 0;
+  margin-left: auto;
+}
+.region-row {
+  display: flex;
+  align-items: center;
+  gap: 4px;
 }
 .region-trigger {
   display: inline-flex;
@@ -79,12 +91,34 @@ onUnmounted(() => document.removeEventListener('click', onDocClick))
   line-height: 1;
   cursor: pointer;
 }
-.region-trigger:hover {
+.region-suffix {
+  flex: 0 0 auto;
+  padding: 0.34rem 0.45rem;
+  border: 1px solid var(--line);
+  border-radius: 9px;
+  background: var(--surface);
+  color: var(--text-2);
+  font-size: 0.72rem;
+  font-weight: 600;
+  line-height: 1;
+  white-space: nowrap;
+}
+.region-trigger:hover:not(:disabled) {
   background: var(--surface-2);
+}
+.region-trigger:disabled {
+  opacity: 0.7;
+  cursor: default;
 }
 .region-code {
   font-weight: 600;
   letter-spacing: 0.04em;
+}
+.region-placeholder {
+  color: var(--text-3);
+  font-weight: 500;
+  min-width: 1.2rem;
+  text-align: center;
 }
 .chevron {
   color: var(--text-3);
