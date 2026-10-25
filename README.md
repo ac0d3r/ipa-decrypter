@@ -6,7 +6,7 @@ Search apps by name or Bundle ID in the browser; the server downloads the encryp
 
 ## Requirements
 
-- Docker (recommended), or Go 1.27 + Bun to build from source (plus `make build-transform` for local decryption — the Docker image already ships the transform helper)
+- Docker (recommended), or Go 1.27 + Bun to build from source
 - A FairPlay `credential.bin` for each Apple ID (extracted from a jailbroken device, see [fairplay-decrypt](https://github.com/EthanArbuckle/fairplay-decrypt)), or alternatively a jailbroken iOS device running [unfaird](https://github.com/lbr77/unfaird), on the same LAN as the server (or otherwise reachable)
 - At least one Apple ID with access to the App Store
 
@@ -57,7 +57,6 @@ For Docker deployments, settings live in `.env` (see [.env.example](.env.example
 ```bash
 make deps        # install dependencies
 make build-all   # build backend + frontend
-make build-transform  # build the FairPlay transform helper into bin/ (local decryption)
 make dev-web     # frontend dev server (proxies /api -> :8080)
 make ci          # gofmt + go vet + go test
 ```

@@ -112,6 +112,8 @@ export const messages = {
       footerGithub: 'GitHub',
       footerLicense: 'MIT License',
       noRegion: '无账号',
+      showMoreRecent: '展开其余 {n} 个',
+      showLessRecent: '收起',
     },
     accounts: {
       listTitle: '账号列表',
@@ -301,6 +303,8 @@ export const messages = {
       footerGithub: 'GitHub',
       footerLicense: 'MIT License',
       noRegion: 'No account',
+      showMoreRecent: 'Show {n} more',
+      showLessRecent: 'Show less',
     },
     accounts: {
       listTitle: 'Accounts',

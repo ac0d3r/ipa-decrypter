@@ -1,8 +1,7 @@
 #!/usr/bin/env python3
 """Generate golden test vectors from the Python fairplay-decrypt core.
 
-Usage (from the fairplay-decrypt checkout that provides core.py and the
-built transform helper):
+Usage (from the fairplay-decrypt checkout that provides core.py):
 
     FAIRPLAY_ROOT=/path/to/fairplay-decrypt \
         python scripts/fairplay_vectors.py > third-party/fairplay/vectors_test.go
@@ -20,7 +19,6 @@ ROOT = Path(os.environ.get("FAIRPLAY_ROOT", "../fairplay-decrypt"))
 sys.path.insert(0, str(ROOT))
 
 from core import (  # noqa: E402
-    BlockTransform,
     derive_page_key,
     derive_work16,
     finish,
@@ -81,17 +79,16 @@ lines.append("var workVectors = []struct{ credential, sinf, want string }{")
 lines.append(f"\t{{{hexs(credential)}, {hexs(sinf)}, {hexs(derive_work16(credential, sinf))}}},")
 lines.append("}")
 
-# Page-key vectors via the real C transform helper.
-with BlockTransform(ROOT / "transform", ROOT / "transform_const_data.bin") as transform:
-    lines.append("")
-    lines.append("var pageKeyVectors = []struct{ wrapped string; index uint32; work, want string }{")
-    for _ in range(8):
-        wrapped = bytes(random.randrange(256) for _ in range(16))
-        index = random.randrange(1 << 32)
-        w = bytes(random.randrange(256) for _ in range(16))
-        lines.append(
-            f"\t{{{hexs(wrapped)}, {index}, {hexs(w)}, {hexs(derive_page_key(wrapped, index, w, transform))}}},"
-        )
-    lines.append("}")
+# Page-key vectors; block_transform is now pure Python, no helper needed.
+lines.append("")
+lines.append("var pageKeyVectors = []struct{ wrapped string; index uint32; work, want string }{")
+for _ in range(8):
+    wrapped = bytes(random.randrange(256) for _ in range(16))
+    index = random.randrange(1 << 32)
+    w = bytes(random.randrange(256) for _ in range(16))
+    lines.append(
+        f"\t{{{hexs(wrapped)}, {index}, {hexs(w)}, {hexs(derive_page_key(wrapped, index, w))}}},"
+    )
+lines.append("}")
 
 print("\n".join(lines))

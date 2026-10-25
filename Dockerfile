@@ -30,6 +30,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM golang:1.27-alpine AS backend
 WORKDIR /src
+# Injected by CI (the git tag); plain docker builds fall back to "dev".
+ARG VERSION=dev
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -40,23 +42,7 @@ COPY third-party/fairplay/ ./third-party/fairplay/
 COPY --from=web /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /ipa-decrypter ./cmd/server
-
-FROM alpine:3.22 AS transform
-# Only the FairPlay transform helper is built from fairplay-decrypt, so it
-# is cloned at build time (like ipatool) instead of being a submodule.
-# "latest" resolves to the upstream default-branch HEAD at build time; pin
-# a commit SHA for reproducible builds.
-ARG FAIRPLAY_VERSION=latest
-RUN apk add --no-cache git gcc musl-dev
-WORKDIR /src
-RUN if [ "$FAIRPLAY_VERSION" = "latest" ]; then \
-        git clone --depth 1 https://github.com/EthanArbuckle/fairplay-decrypt.git .; \
-    else \
-        git clone https://github.com/EthanArbuckle/fairplay-decrypt.git . \
-        && git checkout --detach "$FAIRPLAY_VERSION"; \
-    fi \
-    && cc -std=c11 -O2 -o /transform transform.c
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/ac0d3r/ipa-decrypter/internal/version.Version=${VERSION}" -o /ipa-decrypter ./cmd/server
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata \
@@ -65,14 +51,10 @@ WORKDIR /app
 COPY --from=backend /ipa-decrypter ./ipa-decrypter
 COPY --from=web /src/web/dist ./web/dist
 COPY --from=ipatool /ipatool /usr/local/bin/ipatool
-COPY --from=transform /transform /usr/local/bin/transform
-COPY --from=transform /src/transform_const_data.bin /usr/local/share/fairplay/transform_const_data.bin
 ENV DATA_DIR=/data \
     WEB_DIR=/app/web/dist \
     LISTEN_ADDR=:8080 \
     IPATOOL_BIN=/usr/local/bin/ipatool \
-    FAIRPLAY_TRANSFORM_BIN=/usr/local/bin/transform \
-    FAIRPLAY_TRANSFORM_CONST=/usr/local/share/fairplay/transform_const_data.bin \
     KEYCHAIN_PASSPHRASE=ipatool-ipa-decrypter
 RUN mkdir -p /data && chown -R app:app /data /app
 USER app

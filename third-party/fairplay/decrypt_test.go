@@ -22,7 +22,7 @@ func TestEndToEndIPADecrypt(t *testing.T) {
 	encrypted := filepath.Join(root, "out-account-a", "c45a6e7f-9120-425a-9e2a-f95b7126ba91.ipa")
 	reference := filepath.Join(root, "out-account-a", "decrypted.ipa")
 	credentialPath := filepath.Join(root, "out-account-a", "credential.bin")
-	for _, path := range []string{encrypted, reference, credentialPath, filepath.Join(root, "transform")} {
+	for _, path := range []string{encrypted, reference, credentialPath} {
 		if _, err := os.Stat(path); err != nil {
 			t.Skipf("sample file missing: %s", path)
 		}
@@ -33,18 +33,9 @@ func TestEndToEndIPADecrypt(t *testing.T) {
 		t.Fatalf("read credential: %v", err)
 	}
 
-	block, err := NewBlockTransform(
-		filepath.Join(root, "transform"),
-		filepath.Join(root, "transform_const_data.bin"),
-	)
-	if err != nil {
-		t.Fatalf("start transform: %v", err)
-	}
-	defer block.Close()
-
 	outDir := t.TempDir()
 	output := filepath.Join(outDir, "decrypted-go.ipa")
-	pages, err := DecryptIPA(encrypted, output, credential, block, func(line string) {
+	pages, err := DecryptIPA(encrypted, output, credential, func(line string) {
 		t.Logf("progress: %s", line)
 	})
 	if err != nil {

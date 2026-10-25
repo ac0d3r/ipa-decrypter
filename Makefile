@@ -4,8 +4,8 @@ BIN         ?= bin/ipa-decrypter
 GO          ?= go
 BUN         ?= bun
 UNFAIRD_DIR ?= third-party/unfaird
-FAIRPLAY_VERSION ?= latest
-FAIRPLAY_SRC ?= .cache/fairplay-decrypt
+VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS     ?= -s -w -X github.com/ac0d3r/ipa-decrypter/internal/version.Version=$(VERSION)
 
 help:
 	@echo "ipa-decrypter"
@@ -14,7 +14,6 @@ help:
 	@echo "  make build          Build backend binary to $(BIN)"
 	@echo "  make build-web      Build frontend to web/dist"
 	@echo "  make build-all      Build backend + frontend"
-	@echo "  make build-transform Build the FairPlay transform helper into bin/"
 	@echo "  make build-unfaird  Build unfaird iOS debs into third-party/unfaird/debs"
 	@echo "  make install-unfaird SSH-install debs to a jailbroken device (root@ip:port)"
 	@echo "  make dev-web        Start Vite dev server (proxies /api -> :8080)"
@@ -27,34 +26,12 @@ deps:
 
 build:
 	@mkdir -p $(dir $(BIN))
-	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '-s -w' -o $(BIN) ./cmd/server
+	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/server
 
 build-web:
 	cd web && $(BUN) run build
 
 build-all: build build-web
-
-# Build the FairPlay page-key transform helper (C) from fairplay-decrypt
-# into bin/. FAIRPLAY_VERSION=latest tracks the upstream default branch;
-# pin a commit SHA for reproducible builds.
-build-transform:
-	@if [ "$(FAIRPLAY_VERSION)" = "latest" ]; then \
-		if [ -d "$(FAIRPLAY_SRC)/.git" ]; then \
-			git -C "$(FAIRPLAY_SRC)" fetch --depth 1 origin main; \
-			git -C "$(FAIRPLAY_SRC)" reset --hard FETCH_HEAD; \
-		else \
-			rm -rf "$(FAIRPLAY_SRC)"; \
-			git clone --depth 1 https://github.com/EthanArbuckle/fairplay-decrypt.git "$(FAIRPLAY_SRC)"; \
-		fi; \
-	else \
-		if [ ! -d "$(FAIRPLAY_SRC)/.git" ]; then \
-			rm -rf "$(FAIRPLAY_SRC)"; \
-			git clone https://github.com/EthanArbuckle/fairplay-decrypt.git "$(FAIRPLAY_SRC)"; \
-		fi; \
-		git -C "$(FAIRPLAY_SRC)" checkout --detach "$(FAIRPLAY_VERSION)"; \
-	fi
-	@mkdir -p $(dir $(BIN))
-	$(CC) -std=c11 -O2 -o bin/transform $(FAIRPLAY_SRC)/transform.c
 
 # Requires Theos, iPhoneOS SDK, and ldid. Override schemes with
 # `make build-unfaird SCHEMES=rootless` or `SCHEMES=rootless roothide`.
@@ -96,3 +73,4 @@ clean:
 	fi
 	rm -rf $(UNFAIRD_DIR)/.build $(UNFAIRD_DIR)/.build-ios
 	rm -rf $(dir $(BIN)) web/dist .cache
+	rm -rf ipa-decrypter_latest.tar

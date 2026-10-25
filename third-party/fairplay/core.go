@@ -1,7 +1,7 @@
 // FairPlay IPA decryption and page-key derivation.
 //
-// Go port of fairplay-decrypt's core.py. The table-backed block transform
-// is delegated to the external `transform` helper (BlockTransform).
+// Go port of fairplay-decrypt's core.py. The block transform is pure Go
+// (BlockTransform); no external helper is required.
 package fairplay
 
 import (
@@ -436,14 +436,14 @@ func finish(state []byte) ([]byte, error) {
 }
 
 // DerivePageKey derives the AES key for one encrypted page.
-func DerivePageKey(wrapped []byte, absoluteIndex uint32, work []byte, block *BlockTransform) ([]byte, error) {
+func DerivePageKey(wrapped []byte, absoluteIndex uint32, work []byte) ([]byte, error) {
 	sources, err := SourceBlocks(wrapped, absoluteIndex)
 	if err != nil {
 		return nil, err
 	}
 	transformed := make([][]byte, 3)
 	for i, source := range sources {
-		out, err := block.Run(source, work)
+		out, err := BlockTransform(source, work)
 		if err != nil {
 			return nil, err
 		}
@@ -466,7 +466,7 @@ func DerivePageKey(wrapped []byte, absoluteIndex uint32, work []byte, block *Blo
 
 // DecryptBinary decrypts every encrypted arm64 page of one binary and
 // clears cryptid. It returns the patched binary and the page count.
-func DecryptBinary(source, sinf, supf, credential []byte, block *BlockTransform) (result []byte, pages int, err error) {
+func DecryptBinary(source, sinf, supf, credential []byte) (result []byte, pages int, err error) {
 	info, err := Arm64EncryptionInfo(source)
 	if err != nil {
 		return nil, 0, err
@@ -494,7 +494,7 @@ func DecryptBinary(source, sinf, supf, credential []byte, block *BlockTransform)
 			return nil, 0, fmt.Errorf("page index exceeds uint32 range")
 		}
 		absoluteIndex := uint32(pageIndex) //nolint:gosec // G115: pageIndex bounded above
-		key, err := DerivePageKey(record[:16], absoluteIndex, work, block)
+		key, err := DerivePageKey(record[:16], absoluteIndex, work)
 		if err != nil {
 			return nil, 0, err
 		}

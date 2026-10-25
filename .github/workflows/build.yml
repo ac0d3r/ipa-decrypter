@@ -19,7 +19,6 @@ jobs:
       tags: ${{ steps.tags.outputs.tags }}
       push: ${{ steps.tags.outputs.push }}
       ipatool_version: ${{ steps.ipatool.outputs.ipatool_version }}
-      fairplay_version: ${{ steps.fairplay.outputs.fairplay_version }}
     steps:
       # Resolve the ipatool version up front so the build-arg (and thus the layer
       # cache key) changes only when a new ipatool release is out; the Dockerfile
@@ -32,16 +31,6 @@ jobs:
           [ -n "$IPATOOL_VERSION" ] || { echo "failed to resolve ipatool version" >&2; exit 1; }
           echo "Building ipatool ${IPATOOL_VERSION}" >&2
           echo "ipatool_version=$IPATOOL_VERSION" >> "$GITHUB_OUTPUT"
-
-      # Same idea for the fairplay-decrypt transform helper: "latest" is the
-      # default-branch HEAD commit.
-      - id: fairplay
-        name: Resolve fairplay-decrypt version
-        run: |
-          FAIRPLAY_VERSION="$(git ls-remote https://github.com/EthanArbuckle/fairplay-decrypt.git HEAD | awk '{print $1}')"
-          [ -n "$FAIRPLAY_VERSION" ] || { echo "failed to resolve fairplay-decrypt version" >&2; exit 1; }
-          echo "Building fairplay transform ${FAIRPLAY_VERSION}" >&2
-          echo "fairplay_version=$FAIRPLAY_VERSION" >> "$GITHUB_OUTPUT"
 
       - id: tags
         name: Resolve image tags
@@ -97,7 +86,7 @@ jobs:
           outputs: ${{ needs.resolve.outputs.push == 'true' && 'type=image,push-by-digest=true,name-canonical=true,push=true' || '' }}
           build-args: |
             IPATOOL_VERSION=${{ needs.resolve.outputs.ipatool_version }}
-            FAIRPLAY_VERSION=${{ needs.resolve.outputs.fairplay_version }}
+            VERSION=${{ github.ref_name }}
           cache-from: type=gha,scope=build-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.arch }}
 
