@@ -30,6 +30,8 @@ RUN --mount=type=cache,target=/go/pkg/mod \
 
 FROM golang:1.27-alpine AS backend
 WORKDIR /src
+# Injected by CI (the git tag); plain docker builds fall back to "dev".
+ARG VERSION=dev
 COPY go.mod go.sum ./
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
@@ -40,7 +42,7 @@ COPY third-party/fairplay/ ./third-party/fairplay/
 COPY --from=web /src/web/dist ./web/dist
 RUN --mount=type=cache,target=/go/pkg/mod \
     --mount=type=cache,target=/root/.cache/go-build \
-    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w" -o /ipa-decrypter ./cmd/server
+    CGO_ENABLED=0 go build -trimpath -ldflags="-s -w -X github.com/ac0d3r/ipa-decrypter/internal/version.Version=${VERSION}" -o /ipa-decrypter ./cmd/server
 
 FROM alpine:3.22
 RUN apk add --no-cache ca-certificates tzdata \

@@ -4,6 +4,8 @@ BIN         ?= bin/ipa-decrypter
 GO          ?= go
 BUN         ?= bun
 UNFAIRD_DIR ?= third-party/unfaird
+VERSION     ?= $(shell git describe --tags --always --dirty 2>/dev/null || echo dev)
+LDFLAGS     ?= -s -w -X github.com/ac0d3r/ipa-decrypter/internal/version.Version=$(VERSION)
 
 help:
 	@echo "ipa-decrypter"
@@ -24,7 +26,7 @@ deps:
 
 build:
 	@mkdir -p $(dir $(BIN))
-	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '-s -w' -o $(BIN) ./cmd/server
+	CGO_ENABLED=0 $(GO) build -trimpath -buildvcs=true -ldflags '$(LDFLAGS)' -o $(BIN) ./cmd/server
 
 build-web:
 	cd web && $(BUN) run build

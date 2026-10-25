@@ -86,6 +86,7 @@ jobs:
           outputs: ${{ needs.resolve.outputs.push == 'true' && 'type=image,push-by-digest=true,name-canonical=true,push=true' || '' }}
           build-args: |
             IPATOOL_VERSION=${{ needs.resolve.outputs.ipatool_version }}
+            VERSION=${{ github.ref_name }}
           cache-from: type=gha,scope=build-${{ matrix.arch }}
           cache-to: type=gha,mode=max,scope=build-${{ matrix.arch }}
 

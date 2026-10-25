@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/ac0d3r/ipa-decrypter/internal/services"
+	"github.com/ac0d3r/ipa-decrypter/internal/version"
 	"github.com/gin-gonic/gin"
 )
 
@@ -60,5 +61,5 @@ func (s *Server) handleNoRoute(c *gin.Context) {
 }
 
 func (s *Server) handleHealth(c *gin.Context) {
-	c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "ipa-decrypter"})
+	c.JSON(http.StatusOK, gin.H{"status": "ok", "service": "ipa-decrypter", "version": version.Version})
 }

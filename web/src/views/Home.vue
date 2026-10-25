@@ -62,7 +62,7 @@
     <div v-if="cache.length" class="feat-block">
       <div class="feat-title">{{ t('home.recent') }}</div>
       <div class="app-list">
-        <article v-for="g in recentGroups" :key="g.bundleId" class="app-card done">
+        <article v-for="g in visibleRecentGroups" :key="g.bundleId" class="app-card done">
           <div class="app-row">
             <img v-if="g.items[0].icon_url" :src="g.items[0].icon_url" class="app-icon" alt="" />
             <div v-else class="app-icon placeholder"></div>
@@ -108,6 +108,15 @@
           </div>
         </article>
       </div>
+      <button
+        v-if="recentGroups.length > RECENT_PREVIEW_COUNT"
+        type="button"
+        class="recent-toggle"
+        @click="showAllRecent = !showAllRecent"
+      >
+        {{ showAllRecent ? t('home.showLessRecent') : t('home.showMoreRecent', { n: recentGroups.length - RECENT_PREVIEW_COUNT }) }}
+        <span class="chev">{{ showAllRecent ? '▴' : '▾' }}</span>
+      </button>
     </div>
 
     <div
@@ -248,6 +257,10 @@
       <a href="https://github.com/ac0d3r/ipa-decrypter/blob/main/LICENSE" target="_blank" rel="noopener noreferrer">
         {{ t('home.footerLicense') }}
       </a>
+      <template v-if="serverVersion">
+        <span class="sep">·</span>
+        <span class="version">v{{ serverVersion }}</span>
+      </template>
     </footer>
   </div>
 </template>
@@ -283,6 +296,7 @@ const loading = ref(false)
 const busy = ref(false)
 const searched = ref(false)
 const notice = ref('')
+const serverVersion = ref('')
 
 function noticeFromError(e) {
   return e?.message || t('home.downloadFailed')
@@ -492,6 +506,13 @@ const recentGroups = computed(() => {
   return groups
 })
 
+// Collapsed by default: only the newest few apps are shown until expanded.
+const RECENT_PREVIEW_COUNT = 3
+const showAllRecent = ref(false)
+const visibleRecentGroups = computed(() =>
+  showAllRecent.value ? recentGroups.value : recentGroups.value.slice(0, RECENT_PREVIEW_COUNT)
+)
+
 function cachedVersionLabel(item) {
   if (item.display_version) return `v${item.display_version}`
   if (item.external_version_id) return item.external_version_id
@@ -630,12 +651,22 @@ function startPolling() {
 
 onMounted(async () => {
   await refreshAuth()
+  loadServerVersion()
   await loadRegions()
   await loadCache()
   await pollQueue()
   setInterval(pollQueue, 3000)
 })
 onUnmounted(() => { if (pollTimer) clearInterval(pollTimer) })
+
+async function loadServerVersion() {
+  try {
+    const res = await fetch('/health')
+    if (!res.ok) return
+    const d = await res.json()
+    serverVersion.value = String(d.version || '').replace(/^v/, '')
+  } catch {}
+}
 
 async function refreshAuth() {
   try {
@@ -954,4 +985,22 @@ h1 { font-size: 1.35rem; margin: 0; font-weight: 650; line-height: 1.15; }
   color: var(--text-4);
   user-select: none;
 }
+.site-footer .version {
+  font-family: var(--mono);
+  font-size: 0.68rem;
+  color: var(--text-4);
+}
+.recent-toggle {
+  align-self: center;
+  margin-top: 0.45rem;
+  padding: 0.3rem 0.7rem;
+  border-radius: 8px;
+  border: 1px solid var(--line-2);
+  background: transparent;
+  color: var(--text-2);
+  font-size: 0.68rem;
+  cursor: pointer;
+  line-height: 1.2;
+}
+.recent-toggle:hover { background: var(--surface-2); color: var(--text); }
 </style>
