@@ -2,8 +2,6 @@ package fairplay
 
 import (
 	"encoding/hex"
-	"os"
-	"path/filepath"
 	"testing"
 )
 
@@ -64,26 +62,24 @@ func TestDeriveWork16(t *testing.T) {
 }
 
 func TestDerivePageKey(t *testing.T) {
-	root := os.Getenv("FAIRPLAY_ROOT")
-	if root == "" {
-		t.Skip("FAIRPLAY_ROOT not set; transform helper unavailable")
-	}
-	block, err := NewBlockTransform(
-		filepath.Join(root, "transform"),
-		filepath.Join(root, "transform_const_data.bin"),
-	)
-	if err != nil {
-		t.Fatalf("start transform: %v", err)
-	}
-	defer block.Close()
-
 	for i, v := range pageKeyVectors {
-		got, err := DerivePageKey(decode16(t, v.wrapped), v.index, decode16(t, v.work), block)
+		got, err := DerivePageKey(decode16(t, v.wrapped), v.index, decode16(t, v.work))
 		if err != nil {
 			t.Fatalf("vector %d: %v", i, err)
 		}
 		if hex.EncodeToString(got) != v.want {
 			t.Fatalf("vector %d: page key = %x, want %s", i, got, v.want)
 		}
+	}
+}
+
+func TestBlockTransform(t *testing.T) {
+	// AES-128-ECB encrypt of source ^ CONSTANT under work ^ WORK_MASK;
+	// verified via page-key vectors and the end-to-end IPA test.
+	if _, err := BlockTransform(make([]byte, 15), make([]byte, 16)); err == nil {
+		t.Fatal("expected error for short source block")
+	}
+	if _, err := BlockTransform(make([]byte, 16), make([]byte, 15)); err == nil {
+		t.Fatal("expected error for short work key")
 	}
 }

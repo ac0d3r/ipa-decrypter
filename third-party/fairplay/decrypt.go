@@ -22,7 +22,7 @@ type ProgressFunc func(line string)
 // using credential (exactly 16 bytes) and writes the result to outputPath.
 // The output path must not exist. It returns the total number of decrypted
 // pages.
-func DecryptIPA(ipaPath, outputPath string, credential []byte, block *BlockTransform, progress ProgressFunc) (int, error) {
+func DecryptIPA(ipaPath, outputPath string, credential []byte, progress ProgressFunc) (int, error) {
 	if len(credential) != 16 {
 		return 0, fmt.Errorf("credential must contain exactly 16 bytes")
 	}
@@ -119,7 +119,7 @@ func DecryptIPA(ipaPath, outputPath string, credential []byte, block *BlockTrans
 	replacements := make(map[string][]byte, len(plan))
 	totalPages := 0
 	for ordinal, entry := range plan {
-		result, pages, err := DecryptBinary(entry.source, entry.sinf, entry.supf, credential, block)
+		result, pages, err := DecryptBinary(entry.source, entry.sinf, entry.supf, credential)
 		if err != nil {
 			return 0, fmt.Errorf("%s: %w", entry.binaryPath, err)
 		}

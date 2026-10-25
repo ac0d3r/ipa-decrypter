@@ -444,8 +444,7 @@ func (s *TaskService) decrypt(task *db.Task) error {
 	}
 
 	// Prefer local FairPlay decryption; fall back to an unfaird device
-	// when the account has no credential or the transform helper is
-	// unavailable.
+	// when the account has no credential.
 	handled, err := s.decryptLocal(task)
 	if handled {
 		return err
@@ -504,13 +503,10 @@ func (s *TaskService) decrypt(task *db.Task) error {
 }
 
 // decryptLocal attempts local FairPlay decryption. It reports handled=false
-// when preconditions are missing (no credential or transform helper) so the
-// caller can fall back to device-based decryption; once handled=true, err
-// reports success or failure.
+// when preconditions are missing (no credential) so the caller can fall
+// back to device-based decryption; once handled=true, err reports success
+// or failure.
 func (s *TaskService) decryptLocal(task *db.Task) (bool, error) {
-	if s.cfg.FairplayTransformBin == "" || s.cfg.FairplayTransformConst == "" {
-		return false, nil
-	}
 	credential, credErr := s.accounts.Credential(task.AccountID)
 	if credErr != nil {
 		s.log(task, "No FairPlay credential on account, using device")
@@ -521,16 +517,6 @@ func (s *TaskService) decryptLocal(task *db.Task) (bool, error) {
 		}).Info("fairplay decrypt skipped: no credential")
 		return false, nil
 	}
-	transform, tErr := fairplay.NewBlockTransform(s.cfg.FairplayTransformBin, s.cfg.FairplayTransformConst)
-	if tErr != nil {
-		s.log(task, "FairPlay transform unavailable, using device")
-		taskLog.WithFields(map[string]any{
-			"task_id": task.ID,
-			"error":   tErr.Error(),
-		}).Warn("fairplay decrypt skipped: transform unavailable")
-		return false, nil
-	}
-	defer func() { _ = transform.Close() }()
 
 	s.log(task, "Decrypting locally with FairPlay credential")
 	taskLog.WithFields(map[string]any{
@@ -540,7 +526,7 @@ func (s *TaskService) decryptLocal(task *db.Task) (bool, error) {
 
 	output := filepath.Join(s.cfg.DecryptedDir, task.ID+".ipa")
 	_ = os.Remove(output)
-	pages, err := fairplay.DecryptIPA(task.EncryptedPath, output, credential, transform, func(line string) {
+	pages, err := fairplay.DecryptIPA(task.EncryptedPath, output, credential, func(line string) {
 		s.log(task, line)
 	})
 	task.UpdatedAt = time.Now().UTC()

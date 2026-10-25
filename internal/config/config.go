@@ -17,11 +17,6 @@ type Config struct {
 	AccountsDir        string
 	IPAsDir            string
 	DecryptedDir       string
-	// FairPlay transform helper (C) and its constant-data table. When both
-	// exist on disk, decryption prefers local FairPlay decryption and only
-	// falls back to unfaird devices if the account has no credential.
-	FairplayTransformBin   string
-	FairplayTransformConst string
 }
 
 func Load() (Config, error) {
@@ -36,9 +31,6 @@ func Load() (Config, error) {
 		AccountsDir:  filepath.Join(dataDir, "accounts"),
 		IPAsDir:      filepath.Join(dataDir, "ipas"),
 		DecryptedDir: filepath.Join(dataDir, "decrypted"),
-
-		FairplayTransformBin:   env("FAIRPLAY_TRANSFORM_BIN", filepath.Join("bin", "transform")),
-		FairplayTransformConst: env("FAIRPLAY_TRANSFORM_CONST", filepath.Join(".cache", "fairplay-decrypt", "transform_const_data.bin")),
 
 		KeychainPassphrase: env("KEYCHAIN_PASSPHRASE", "ipatool-ipa-decrypter"),
 		AdminUsername:      env("ADMIN_USERNAME", "admin"),
